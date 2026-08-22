@@ -3,73 +3,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { 
   Dice6, 
   Shield, 
   Map as MapIcon, 
   ScrollText, 
   Wand2, 
   Package,
-  Code,
-  Swords,
-  Menu
+  Swords
 } from "lucide-react";
-import Link from "next/link";
-
-import { ModeToggle } from "@/components/mode-toggle";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
-      {/* Header/Nav */}
-      <header className="container mx-auto py-4 md:py-6 px-4 flex justify-between items-center border-b border-border">
-        <div className="flex items-center gap-2">
-          <span className="text-xl md:text-2xl font-serif font-bold text-primary">Dungeoneer 🐉</span>
-        </div>
-        
-        {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-4">
-          <ModeToggle />
-          <Link href="https://github.com/Kevinrehem/Dungeoneer" target="_blank">
-            <Button variant="ghost" size="icon">
-              <Code className="w-5 h-5" />
-            </Button>
-          </Link>
-          <Button variant="outline">Entrar</Button>
-          <Button>Começar Jornada</Button>
-        </div>
-
-        {/* Mobile Nav */}
-        <div className="md:hidden flex items-center gap-2">
-          <ModeToggle />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="w-6 h-6" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem asChild>
-                <Link href="https://github.com/Kevinrehem/Dungeoneer" target="_blank" className="w-full cursor-pointer flex items-center gap-2">
-                  <Code className="w-4 h-4" /> Repositório
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <span className="w-full cursor-pointer">Entrar</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <span className="w-full cursor-pointer text-primary font-medium">Começar Jornada</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-
       <main className="container mx-auto px-4 py-12 md:py-24 space-y-16 md:space-y-24">
         {/* Hero Section */}
         <section className="flex flex-col items-center text-center space-y-8 max-w-4xl mx-auto">
