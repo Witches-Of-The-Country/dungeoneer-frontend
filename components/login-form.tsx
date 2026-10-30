@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -14,17 +17,38 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { loginUser } from "@/lib/api/auth";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { login } from "@/lib/api/auth";
 import { useAuth } from "@/lib/hooks/use-auth";
+
+export const loginSchema = z.object({
+  email: z.string().email("E-mail inválido."),
+  password: z.string().min(1, "A senha é obrigatória."),
+});
+
+export type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
+
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -32,13 +56,13 @@ export function LoginForm() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit(values: LoginFormValues) {
     setErrorMessage(null);
     setLoading(true);
 
     try {
-      await loginUser(email, password);
+      await login(values);
+      toast.success("Bem-vindo de volta à Guilda!");
       router.push("/characters");
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -62,73 +86,93 @@ export function LoginForm() {
           Aventure-se na escuridão. Faça login para continuar sua jornada.
         </CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-6 relative z-10">
-          {errorMessage && (
-            <div className="p-3 text-sm rounded bg-destructive/15 text-destructive border border-destructive/30">
-              {errorMessage}
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-foreground font-medium">
-              Email Místico
-            </Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.aventureiro"
-                className="pl-10 bg-background/50 border-border/50 focus-visible:ring-primary focus-visible:border-primary transition-all placeholder:text-muted-foreground/60"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-foreground font-medium flex items-center justify-between">
-              <span>Palavra-Passe</span>
-              <span className="text-xs text-primary hover:underline cursor-pointer">Esqueceu?</span>
-            </Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="pl-10 pr-10 bg-background/50 border-border/50 focus-visible:ring-primary focus-visible:border-primary transition-all placeholder:text-muted-foreground/60"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
-                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4 relative z-10">
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            {loading ? "Desvendando..." : "Desvendar os Mistérios"}
-          </Button>
-          <p className="text-sm text-center text-muted-foreground w-full">
-            Um novo aventureiro?{" "}
-            <a href="/register" className="text-primary hover:underline font-medium">
-              Junte-se à Guilda
-            </a>
-          </p>
-        </CardFooter>
-      </form>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <CardContent className="space-y-6 relative z-10">
+            {errorMessage && (
+              <div className="p-3 text-sm rounded bg-destructive/15 text-destructive border border-destructive/30">
+                {errorMessage}
+              </div>
+            )}
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-foreground font-medium">
+                    Email Místico
+                  </FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="email"
+                        placeholder="seu@email.aventureiro"
+                        className="pl-10 bg-background/50 border-border/50 focus-visible:ring-primary focus-visible:border-primary transition-all placeholder:text-muted-foreground/60"
+                        {...field}
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-foreground font-medium flex items-center justify-between">
+                    <span>Palavra-Passe</span>
+                    <span className="text-xs text-primary hover:underline cursor-pointer">
+                      Esqueceu?
+                    </span>
+                  </FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        className="pl-10 pr-10 bg-background/50 border-border/50 focus-visible:ring-primary focus-visible:border-primary transition-all placeholder:text-muted-foreground/60"
+                        {...field}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                        aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4 relative z-10">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {loading ? "Desvendando..." : "Desvendar os Mistérios"}
+            </Button>
+            <p className="text-sm text-center text-muted-foreground w-full">
+              Um novo aventureiro?{" "}
+              <a href="/register" className="text-primary hover:underline font-medium">
+                Junte-se à Guilda
+              </a>
+            </p>
+          </CardFooter>
+        </form>
+      </Form>
     </Card>
   );
 }

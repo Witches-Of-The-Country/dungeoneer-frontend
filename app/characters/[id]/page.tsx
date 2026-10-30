@@ -1,0 +1,657 @@
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import {
+  Shield,
+  Heart,
+  Zap,
+  Footprints,
+  Award,
+  Dices,
+  Edit3,
+  Trash2,
+  ArrowLeft,
+  Plus,
+  Minus,
+  Save,
+  Sparkles,
+  Swords,
+  BookOpen,
+  Backpack,
+  Star,
+  AlertCircle,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  useCharacter,
+  useUpdateCharacter,
+  useDeleteCharacter,
+  ABILITY_KEYS,
+  ABILITY_LABELS,
+  DND_SKILLS,
+  calculateModifier,
+  formatModifier,
+  normalizeAbilityKey,
+} from "@/lib/api/characters";
+import { DeleteCharacterModal } from "@/components/delete-character-modal";
+
+type SheetTab =
+  | "Resumo"
+  | "Atributos"
+  | "Perícias"
+  | "Ações"
+  | "Magias"
+  | "Inventário"
+  | "Talentos"
+  | "Notas";
+
+const SHEET_TABS: SheetTab[] = [
+  "Resumo",
+  "Atributos",
+  "Perícias",
+  "Ações",
+  "Magias",
+  "Inventário",
+  "Talentos",
+  "Notas",
+];
+
+export default function CharacterSheetPage() {
+  const params = useParams();
+  const router = useRouter();
+  const characterId = typeof params?.id === "string" ? params.id : "";
+
+  const {
+    data: character,
+    isLoading,
+    isError,
+    error,
+  } = useCharacter(characterId);
+  const updateMutation = useUpdateCharacter();
+  const deleteMutation = useDeleteCharacter();
+
+  const [activeTab, setActiveTab] = useState<SheetTab>("Resumo");
+  const [notesDraft, setNotesDraft] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const effectiveNotes = notesDraft ?? character?.notes ?? "";
+
+  if (isLoading) {
+    return (
+      <div className="container max-w-6xl mx-auto py-12 px-4">
+        <div className="h-64 rounded-xl bg-slate-900/60 border border-amber-900/30 animate-pulse flex items-center justify-center text-amber-200 font-serif">
+          Abrindo pergaminho do personagem...
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !character) {
+    return (
+      <div className="container max-w-4xl mx-auto py-12 px-4">
+        <Card className="bg-slate-900/80 border border-red-900/50 text-center py-10">
+          <CardHeader>
+            <CardTitle className="text-xl font-serif text-red-300">
+              Ficha não encontrada
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              {error instanceof Error
+                ? error.message
+                : "Não foi possível carregar os dados deste personagem."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/characters">
+              <Button variant="outline" className="border-amber-700/50 text-amber-200">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Voltar para Meus Personagens
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleAdjustHp = async (delta: number) => {
+    const nextHp = Math.min(
+      character.hitPointsMax,
+      Math.max(0, character.hitPointsCurrent + delta)
+    );
+    if (nextHp === character.hitPointsCurrent) return;
+
+    try {
+      await updateMutation.mutateAsync({
+        id: character.id,
+        payload: {
+          name: character.name,
+          hitPointsCurrent: nextHp,
+          hitPointsTemp: character.hitPointsTemp,
+          notes: character.notes ?? "",
+        },
+      });
+      toast.success(`Pontos de Vida atualizados: ${nextHp} / ${character.hitPointsMax}`);
+    } catch {
+      // handled by apiFetch
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    try {
+      await updateMutation.mutateAsync({
+        id: character.id,
+        payload: {
+          name: character.name,
+          hitPointsCurrent: character.hitPointsCurrent,
+          hitPointsTemp: character.hitPointsTemp,
+          notes: effectiveNotes,
+        },
+      });
+      toast.success("Notas do personagem salvas com sucesso!");
+    } catch {
+      // handled by apiFetch
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(character.id);
+      toast.success(`Personagem "${character.name}" excluído.`);
+      setShowDeleteModal(false);
+      router.push("/characters");
+    } catch {
+      // handled by apiFetch
+    }
+  };
+
+  const rulesetLabel =
+    character.ruleset === "SRD_2024" ? "5e 2024" : "5e 2014";
+
+  const proficientSavingThrows = new Set(
+    (character.archetype?.savingThrowProficiencies ?? [])
+      .map(normalizeAbilityKey)
+      .filter(Boolean)
+  );
+
+  const proficientSkillsLower = new Set(
+    (character.background?.skillProficiencies ?? []).map((s) =>
+      s.trim().toLowerCase()
+    )
+  );
+
+  return (
+    <div className="container max-w-6xl mx-auto py-8 px-4 space-y-6">
+      {/* Top Back Link */}
+      <div>
+        <Link
+          href="/characters"
+          className="inline-flex items-center text-xs text-slate-400 hover:text-amber-300 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+          Voltar para Meus Personagens
+        </Link>
+      </div>
+
+      {/* Sheet Header */}
+      <Card className="bg-slate-900/90 border border-amber-900/40 shadow-2xl">
+        <CardContent className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-3xl font-serif font-bold text-amber-300">
+                {character.name}
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                {rulesetLabel}
+              </span>
+              {character.hasPendingLevelChoices && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-600/25 text-amber-200 border border-amber-500/50 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Escolhas de Nível Pendentes
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-slate-300">
+              Nível {character.level} • {character.archetype?.name ?? "Classe"}{" "}
+              • {character.lineage?.name ?? "Linhagem"} •{" "}
+              {character.background?.name ?? "Antecedente"}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 self-end md:self-center">
+            <Link href={`/characters/${character.id}/edit`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-900/50 bg-slate-950 hover:bg-slate-800 text-amber-200"
+              >
+                <Edit3 className="w-4 h-4 mr-1.5" />
+                Editar
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteModal(true)}
+              className="border-red-900/50 bg-slate-950 hover:bg-red-950/50 text-red-400"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Excluir
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 8-Tab Navigation Bar */}
+      <div
+        role="tablist"
+        aria-label="Seções da Ficha de Personagem"
+        className="flex flex-wrap gap-2 p-1.5 rounded-xl bg-slate-900/80 border border-amber-900/40"
+      >
+        {SHEET_TABS.map((tab) => {
+          const isActive = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-serif font-semibold transition-all ${
+                isActive
+                  ? "bg-amber-600 text-slate-950 shadow-md"
+                  : "text-slate-300 hover:text-amber-200 hover:bg-slate-800/60"
+              }`}
+            >
+              {tab}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TAB 1: RESUMO */}
+      {activeTab === "Resumo" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Hit Points & Quick Adjust */}
+          <Card className="bg-slate-900/80 border border-amber-900/40 shadow-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-serif text-amber-200 flex items-center gap-2">
+                <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+                Pontos de Vida
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <span
+                    data-testid="sheet-hp-current"
+                    className="text-4xl font-mono font-bold text-amber-50"
+                  >
+                    {character.hitPointsCurrent}
+                  </span>
+                  <span className="text-lg font-mono text-slate-400">
+                    {" "}
+                    / {character.hitPointsMax} PV
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded border border-amber-500/30">
+                  PV Temp: {character.hitPointsTemp}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label="Reduzir PV"
+                  disabled={
+                    updateMutation.isPending || character.hitPointsCurrent <= 0
+                  }
+                  onClick={() => handleAdjustHp(-1)}
+                  className="flex-1 border-red-900/50 bg-slate-950 hover:bg-red-950/40 text-red-300"
+                >
+                  <Minus className="w-4 h-4 mr-1" />
+                  -1 PV
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label="Aumentar PV"
+                  disabled={
+                    updateMutation.isPending ||
+                    character.hitPointsCurrent >= character.hitPointsMax
+                  }
+                  onClick={() => handleAdjustHp(1)}
+                  className="flex-1 border-emerald-900/50 bg-slate-950 hover:bg-emerald-950/40 text-emerald-300"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  +1 PV
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Combat Stats */}
+          <Card className="bg-slate-900/80 border border-amber-900/40 shadow-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-serif text-amber-200 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-amber-400" />
+                Estatísticas de Combate
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-slate-950/80 border border-amber-900/30 text-center">
+                <span className="text-[11px] text-slate-400 block">
+                  Classe de Armadura
+                </span>
+                <span
+                  data-testid="sheet-ac"
+                  className="text-2xl font-mono font-bold text-amber-300"
+                >
+                  {character.armorClass}
+                </span>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-950/80 border border-amber-900/30 text-center">
+                <span className="text-[11px] text-slate-400 block">
+                  Iniciativa
+                </span>
+                <span
+                  data-testid="sheet-initiative"
+                  className="text-2xl font-mono font-bold text-amber-300"
+                >
+                  {formatModifier(character.initiativeBonus)}
+                </span>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-950/80 border border-amber-900/30 text-center">
+                <span className="text-[11px] text-slate-400 block flex items-center justify-center gap-1">
+                  <Footprints className="w-3 h-3" /> Deslocamento
+                </span>
+                <span className="text-xl font-mono font-bold text-amber-100">
+                  {character.speed} pés
+                </span>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-950/80 border border-amber-900/30 text-center">
+                <span className="text-[11px] text-slate-400 block flex items-center justify-center gap-1">
+                  <Award className="w-3 h-3" /> Proficiência
+                </span>
+                <span className="text-xl font-mono font-bold text-emerald-400">
+                  +{character.proficiencyBonus}
+                </span>
+              </div>
+              <div className="col-span-2 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex items-center justify-between text-xs px-4">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <Dices className="w-4 h-4 text-amber-400" />
+                  Dados de Vida
+                </span>
+                <span className="font-mono font-bold text-amber-200">
+                  {character.level}
+                  {(character.archetype?.hitDice ?? "d8").toLowerCase()}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Saving Throws */}
+          <Card className="bg-slate-900/80 border border-amber-900/40 shadow-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-serif text-amber-200 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-400" />
+                Salvaguardas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {ABILITY_KEYS.map((key) => {
+                const label = ABILITY_LABELS[key];
+                const isProf = proficientSavingThrows.has(key);
+                const score = character.abilityScores?.[key] ?? 10;
+                const baseMod = calculateModifier(score);
+                const serverSave =
+                  character.savingThrows?.[key.toUpperCase()] ??
+                  character.savingThrows?.[key];
+                const totalSave =
+                  serverSave !== undefined
+                    ? serverSave
+                    : baseMod + (isProf ? character.proficiencyBonus : 0);
+
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full ${
+                          isProf
+                            ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]"
+                            : "bg-slate-700"
+                        }`}
+                      />
+                      <span className="font-semibold text-amber-100">
+                        {label.full} ({label.short})
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-amber-300">
+                      {formatModifier(totalSave)}
+                    </span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 2: ATRIBUTOS */}
+      {activeTab === "Atributos" && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {ABILITY_KEYS.map((key) => {
+            const label = ABILITY_LABELS[key];
+            const score = character.abilityScores?.[key] ?? 10;
+            const mod = calculateModifier(score);
+            const isProf = proficientSavingThrows.has(key);
+
+            return (
+              <Card
+                key={key}
+                data-testid={`sheet-ability-card-${key}`}
+                className="bg-slate-900/85 border border-amber-900/40 text-center shadow-xl"
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-serif text-amber-400 uppercase tracking-wider">
+                    {label.short}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-slate-400">
+                    {label.full}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="text-3xl font-mono font-bold text-amber-50">
+                    {formatModifier(mod)}
+                  </div>
+                  <div className="inline-block px-3 py-1 rounded-full bg-slate-950 border border-amber-900/50 text-sm font-mono font-semibold text-amber-200">
+                    Valor: {score}
+                  </div>
+                  <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                    {isProf ? (
+                      <span className="text-amber-300 font-medium">
+                        ● Proficiente em Salvaguarda
+                      </span>
+                    ) : (
+                      <span>○ Sem proficiência</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* TAB 3: PERÍCIAS */}
+      {activeTab === "Perícias" && (
+        <Card className="bg-slate-900/85 border border-amber-900/40 shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-xl font-serif text-amber-200">
+              Perícias (18 Perícias D&amp;D)
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Modificadores calculados a partir dos atributos e proficiências do
+              antecedente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {DND_SKILLS.map((skill) => {
+                const isProf =
+                  proficientSkillsLower.has(skill.enName.toLowerCase()) ||
+                  proficientSkillsLower.has(skill.ptName.toLowerCase());
+                const abilityScore =
+                  character.abilityScores?.[skill.ability] ?? 10;
+                const abilityMod = calculateModifier(abilityScore);
+                const serverSkillMod =
+                  character.skills?.[skill.enName] ??
+                  character.skills?.[skill.ptName];
+                const totalMod =
+                  serverSkillMod !== undefined
+                    ? serverSkillMod
+                    : abilityMod + (isProf ? character.proficiencyBonus : 0);
+
+                return (
+                  <div
+                    key={skill.id}
+                    data-testid={`skill-row-${skill.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-950/80 border border-amber-900/30"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        data-testid={`skill-prof-${skill.id}`}
+                        className={`w-2.5 h-2.5 rounded-full ${
+                          isProf
+                            ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                            : "bg-slate-700"
+                        }`}
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-amber-100">
+                          {skill.ptName}
+                        </span>
+                        <span className="text-xs text-slate-400 ml-1.5 font-mono">
+                          ({ABILITY_LABELS[skill.ability].short})
+                        </span>
+                      </div>
+                    </div>
+                    <span className="font-mono font-bold text-amber-300 text-sm">
+                      {formatModifier(totalMod)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB 4: NOTAS */}
+      {activeTab === "Notas" && (
+        <Card className="bg-slate-900/85 border border-amber-900/40 shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-xl font-serif text-amber-200">
+              Notas &amp; História do Personagem
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Registre antecedentes, traços de personalidade, aliados e anotações
+              de sessão.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <textarea
+              aria-label="Notas do personagem"
+              rows={8}
+              value={effectiveNotes}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              placeholder="Escreva a crônica do seu herói..."
+              className="w-full rounded-xl bg-slate-950 border border-amber-900/50 p-4 text-sm text-amber-50 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+            />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={handleSaveNotes}
+                disabled={updateMutation.isPending}
+                className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {updateMutation.isPending ? "Salvando..." : "Salvar Notas"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* PLACEHOLDER TABS: AÇÕES, MAGIAS, INVENTÁRIO, TALENTOS */}
+      {(activeTab === "Ações" ||
+        activeTab === "Magias" ||
+        activeTab === "Inventário" ||
+        activeTab === "Talentos") && (
+        <div className="space-y-6">
+          {activeTab === "Talentos" &&
+            character.background?.originFeatName && (
+              <Card className="bg-slate-900/85 border border-amber-700/50 shadow-xl">
+                <CardHeader>
+                  <CardTitle className="text-lg font-serif text-amber-300 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-400" />
+                    Talento de Origem: {character.background.originFeatName}
+                  </CardTitle>
+                  {character.background.originFeatDescription && (
+                    <CardDescription className="text-slate-300">
+                      {character.background.originFeatDescription}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+              </Card>
+            )}
+
+          <Card className="bg-slate-900/80 border border-amber-900/40 shadow-xl text-center py-12 px-6">
+            <CardHeader className="items-center space-y-3">
+              <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                {activeTab === "Ações" && <Swords className="w-7 h-7" />}
+                {activeTab === "Magias" && <BookOpen className="w-7 h-7" />}
+                {activeTab === "Inventário" && <Backpack className="w-7 h-7" />}
+                {activeTab === "Talentos" && <Star className="w-7 h-7" />}
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                Em breve
+              </span>
+              <CardTitle className="text-2xl font-serif text-amber-100">
+                Módulo de {activeTab} em Desenvolvimento
+              </CardTitle>
+              <CardDescription className="text-slate-400 max-w-md mx-auto">
+                Os pergaminhos de {activeTab.toLowerCase()} serão desbloqueados
+                nas próximas atualizações da plataforma Dungeoneer.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
+
+      <DeleteCharacterModal
+        open={showDeleteModal}
+        characterName={character.name}
+        isDeleting={deleteMutation.isPending}
+        onCancel={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+      />
+    </div>
+  );
+}

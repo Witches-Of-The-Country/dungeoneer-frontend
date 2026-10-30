@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Eye, EyeOff, Lock, Mail, User, Shield, Sword } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,17 +28,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { registerUser } from "@/lib/api/auth";
+import { register } from "@/lib/api/auth";
 import { useAuth } from "@/lib/hooks/use-auth";
 
-const registerSchema = z.object({
+export const registerSchema = z.object({
   email: z.string().email("Email inválido."),
-  nick: z.string().min(3, "Alcunha deve ter pelo menos 3 caracteres.").max(50, "Máximo de 50 caracteres."),
+  nick: z
+    .string()
+    .min(3, "Alcunha deve ter pelo menos 3 caracteres.")
+    .max(50, "Máximo de 50 caracteres."),
   birthdate: z.string().min(1, "Data de nascimento é obrigatória."),
   modules: z.array(z.string()).min(1, "Selecione pelo menos um módulo."),
-  password: z
-    .string()
-    .min(8, "A senha deve ter pelo menos 8 caracteres."),
+  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres."),
 });
 
 export function RegisterForm() {
@@ -69,12 +71,13 @@ export function RegisterForm() {
     setLoading(true);
 
     try {
-      await registerUser({
+      await register({
         email: values.email,
         nickname: values.nick,
         birthdate: values.birthdate,
         password: values.password,
       });
+      toast.success("Cadastro realizado com sucesso! Bem-vindo à Guilda.");
       router.push("/characters");
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -111,7 +114,9 @@ export function RegisterForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-foreground font-medium">Email Místico</FormLabel>
+                  <FormLabel className="text-foreground font-medium">
+                    Email Místico
+                  </FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -133,7 +138,9 @@ export function RegisterForm() {
                 name="nick"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground font-medium">Alcunha (Nick)</FormLabel>
+                    <FormLabel className="text-foreground font-medium">
+                      Alcunha (Nick)
+                    </FormLabel>
                     <FormControl>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -153,7 +160,9 @@ export function RegisterForm() {
                 name="birthdate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground font-medium">Data de Nascimento</FormLabel>
+                    <FormLabel className="text-foreground font-medium">
+                      Data de Nascimento
+                    </FormLabel>
                     <FormControl>
                       <Input
                         type="date"
@@ -172,7 +181,9 @@ export function RegisterForm() {
               name="modules"
               render={({ field }) => (
                 <FormItem className="space-y-3">
-                  <FormLabel className="text-foreground font-medium">Caminho da Guilda</FormLabel>
+                  <FormLabel className="text-foreground font-medium">
+                    Caminho da Guilda
+                  </FormLabel>
                   <FormDescription className="text-xs">
                     Como você trilhará sua jornada? (Selecione pelo menos um)
                   </FormDescription>
@@ -190,8 +201,12 @@ export function RegisterForm() {
                       >
                         <Sword className="h-6 w-6 text-foreground" />
                         <div className="text-center space-y-1">
-                          <span className="block font-medium text-foreground">Jogador</span>
-                          <span className="block text-xs text-muted-foreground whitespace-normal">Desbrave masmorras</span>
+                          <span className="block font-medium text-foreground">
+                            Jogador
+                          </span>
+                          <span className="block text-xs text-muted-foreground whitespace-normal">
+                            Desbrave masmorras
+                          </span>
                         </div>
                       </ToggleGroupItem>
 
@@ -202,8 +217,12 @@ export function RegisterForm() {
                       >
                         <Shield className="h-6 w-6 text-foreground" />
                         <div className="text-center space-y-1">
-                          <span className="block font-medium text-foreground">Mestre</span>
-                          <span className="block text-xs text-muted-foreground whitespace-normal">Crie mundos</span>
+                          <span className="block font-medium text-foreground">
+                            Mestre
+                          </span>
+                          <span className="block text-xs text-muted-foreground whitespace-normal">
+                            Crie mundos
+                          </span>
                         </div>
                       </ToggleGroupItem>
                     </ToggleGroup>
@@ -218,7 +237,9 @@ export function RegisterForm() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-foreground font-medium">Palavra-Passe</FormLabel>
+                  <FormLabel className="text-foreground font-medium">
+                    Palavra-Passe
+                  </FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -234,7 +255,11 @@ export function RegisterForm() {
                         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
                         aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
                       </button>
                     </div>
                   </FormControl>
@@ -242,7 +267,7 @@ export function RegisterForm() {
                 </FormItem>
               )}
             />
-            
+
             <Button
               type="submit"
               disabled={loading}

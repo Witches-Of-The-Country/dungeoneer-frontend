@@ -1,110 +1,138 @@
-const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || "http://localhost:8082";
+import { apiFetch, AUTH_TOKEN_KEY, AUTH_USER_KEY } from './client';
 
 export interface UserProfile {
   id: string;
   email: string;
   nickname: string;
-  birthdate: string;
-  roles: string[];
+  birthdate?: string;
+  roles?: string[];
 }
 
 export interface AuthResponse {
   accessToken: string;
-  tokenType: string;
-  expiresIn: number;
+  tokenType?: string;
+  expiresIn?: number;
   user: UserProfile;
 }
 
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  nickname: string;
+  birthdate: string;
+  password: string;
+}
+
 function setCookie(name: string, value: string, days = 7) {
-  if (typeof document === "undefined") return;
+  if (typeof document === 'undefined') return;
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
 }
 
 function deleteCookie(name: string) {
-  if (typeof document === "undefined") return;
+  if (typeof document === 'undefined') return;
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
 }
 
 export function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
+  if (typeof document === 'undefined') return null;
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function persistAuthSession(data: AuthResponse) {
+  if (typeof window === 'undefined') return;
+  const token = data.accessToken;
+  const userJson = JSON.stringify(data.user);
+
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  window.localStorage.setItem('dungeoneer_token', token);
+  window.localStorage.setItem(AUTH_USER_KEY, userJson);
+  window.localStorage.setItem('dungeoneer_user', userJson);
+
+  setCookie(AUTH_TOKEN_KEY, token);
+  setCookie('dungeoneer_token', token);
+  setCookie(AUTH_USER_KEY, userJson);
+  setCookie('dungeoneer_user', userJson);
+
+  window.dispatchEvent(new Event('auth-state-change'));
+}
+
+export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+    skipAuth: true,
+  });
+  persistAuthSession(data);
+  return data;
+}
+
 export async function loginUser(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new Error(errorData?.detail || "Falha na autenticação. Verifique seu email e senha.");
-  }
-
-  const data: AuthResponse = await res.json();
-  if (typeof window !== "undefined") {
-    localStorage.setItem("dungeoneer_token", data.accessToken);
-    localStorage.setItem("dungeoneer_user", JSON.stringify(data.user));
-    setCookie("dungeoneer_token", data.accessToken);
-    setCookie("dungeoneer_user", JSON.stringify(data.user));
-    window.dispatchEvent(new Event("auth-state-change"));
-  }
-  return data;
+  return login({ email, password });
 }
 
-export async function registerUser(payload: {
-  email: string;
-  nickname: string;
-  birthdate: string;
-  password: string;
-}): Promise<AuthResponse> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+export async function register(payload: RegisterPayload): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>('/api/auth/register', {
+    method: 'POST',
     body: JSON.stringify(payload),
+    skipAuth: true,
   });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new Error(errorData?.detail || "Falha ao registrar aventureiro.");
-  }
-
-  const data: AuthResponse = await res.json();
-  if (typeof window !== "undefined") {
-    localStorage.setItem("dungeoneer_token", data.accessToken);
-    localStorage.setItem("dungeoneer_user", JSON.stringify(data.user));
-    setCookie("dungeoneer_token", data.accessToken);
-    setCookie("dungeoneer_user", JSON.stringify(data.user));
-    window.dispatchEvent(new Event("auth-state-change"));
-  }
+  persistAuthSession(data);
   return data;
 }
 
-export function getStoredToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("dungeoneer_token") || getCookie("dungeoneer_token");
+export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {
+  return register(payload);
 }
 
-export function getStoredUser(): UserProfile | null {
-  if (typeof window === "undefined") return null;
-  const userStr = localStorage.getItem("dungeoneer_user") || getCookie("dungeoneer_user");
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return (
+    window.localStorage.getItem(AUTH_TOKEN_KEY) ||
+    window.localStorage.getItem('dungeoneer_token') ||
+    getCookie(AUTH_TOKEN_KEY) ||
+    getCookie('dungeoneer_token')
+  );
+}
+
+export const getStoredToken = getToken;
+
+export function getUser(): UserProfile | null {
+  if (typeof window === 'undefined') return null;
+  const userStr =
+    window.localStorage.getItem(AUTH_USER_KEY) ||
+    window.localStorage.getItem('dungeoneer_user') ||
+    getCookie(AUTH_USER_KEY) ||
+    getCookie('dungeoneer_user');
   if (!userStr) return null;
   try {
-    return JSON.parse(userStr);
+    return JSON.parse(userStr) as UserProfile;
   } catch {
     return null;
   }
 }
 
-export function clearAuth(): void {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("dungeoneer_token");
-    localStorage.removeItem("dungeoneer_user");
-    deleteCookie("dungeoneer_token");
-    deleteCookie("dungeoneer_user");
-    window.dispatchEvent(new Event("auth-state-change"));
+export const getStoredUser = getUser;
+
+export function logout(): void {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.localStorage.removeItem('dungeoneer_token');
+    window.localStorage.removeItem(AUTH_USER_KEY);
+    window.localStorage.removeItem('dungeoneer_user');
+
+    deleteCookie(AUTH_TOKEN_KEY);
+    deleteCookie('dungeoneer_token');
+    deleteCookie(AUTH_USER_KEY);
+    deleteCookie('dungeoneer_user');
+
+    window.dispatchEvent(new Event('auth-state-change'));
   }
 }
+
+export const clearAuth = logout;

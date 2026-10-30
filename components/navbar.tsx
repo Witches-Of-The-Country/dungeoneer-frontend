@@ -3,15 +3,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Code, Menu, LogOut, User as UserIcon, Sparkles, ScrollText } from "lucide-react";
+import {
+  Code,
+  Menu,
+  LogOut,
+  User as UserIcon,
+  Sparkles,
+  ScrollText,
+} from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/lib/hooks/use-auth";
 
@@ -29,14 +36,19 @@ export function Navbar() {
       <div className="container mx-auto py-4 md:py-6 px-4 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Link href="/">
-            <span className="text-xl md:text-2xl font-serif font-bold text-primary">Dungeoneer 🐉</span>
+            <span className="text-xl md:text-2xl font-serif font-bold text-primary">
+              Dungeoneer 🐉
+            </span>
           </Link>
         </div>
-        
+
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-4">
           <ModeToggle />
-          <Link href="https://github.com/Kevinrehem/Dungeoneer" target="_blank">
+          <Link
+            href="https://github.com/Kevinrehem/Dungeoneer"
+            target="_blank"
+          >
             <Button variant="ghost" size="icon">
               <Code className="w-5 h-5" />
             </Button>
@@ -47,37 +59,51 @@ export function Navbar() {
               <Link href="/characters">
                 <Button variant="ghost" className="flex items-center gap-2">
                   <ScrollText className="w-4 h-4 text-primary" />
-                  Personagens
+                  Meus Personagens
                 </Button>
               </Link>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2 border-primary/30">
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2 border-primary/30"
+                  >
                     <UserIcon className="w-4 h-4 text-primary" />
-                    <span>{user.nickname}</span>
+                    <span>{user.nickname || user.email}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user.nickname}</p>
-                      <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                      <p className="text-sm font-medium leading-none">
+                        {user.nickname}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user.email}
+                      </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/characters" className="w-full cursor-pointer flex items-center gap-2">
+                    <Link
+                      href="/characters"
+                      className="w-full cursor-pointer flex items-center gap-2"
+                    >
                       <ScrollText className="w-4 h-4" /> Meus Personagens
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/prototype/character-creation" className="w-full cursor-pointer flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-primary" /> Criar Personagem
+                    <Link
+                      href="/characters/new"
+                      className="w-full cursor-pointer flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4 text-primary" /> Criar
+                      Personagem
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={handleLogout}
                     className="text-destructive focus:text-destructive cursor-pointer flex items-center gap-2"
                   >
@@ -92,7 +118,7 @@ export function Navbar() {
                 <Button variant="outline">Entrar</Button>
               </Link>
               <Link href="/register">
-                <Button>Começar Jornada</Button>
+                <Button>Cadastrar</Button>
               </Link>
             </>
           )}
@@ -109,7 +135,11 @@ export function Navbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem asChild>
-                <Link href="https://github.com/Kevinrehem/Dungeoneer" target="_blank" className="w-full cursor-pointer flex items-center gap-2">
+                <Link
+                  href="https://github.com/Kevinrehem/Dungeoneer"
+                  target="_blank"
+                  className="w-full cursor-pointer flex items-center gap-2"
+                >
                   <Code className="w-4 h-4" /> Repositório
                 </Link>
               </DropdownMenuItem>
@@ -118,21 +148,27 @@ export function Navbar() {
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    Conectado como {user.nickname}
+                    Conectado como {user.nickname || user.email}
                   </DropdownMenuLabel>
                   <DropdownMenuItem asChild>
-                    <Link href="/characters" className="w-full cursor-pointer flex items-center gap-2">
+                    <Link
+                      href="/characters"
+                      className="w-full cursor-pointer flex items-center gap-2"
+                    >
                       <ScrollText className="w-4 h-4" /> Meus Personagens
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/prototype/character-creation" className="w-full cursor-pointer flex items-center gap-2 text-primary font-medium">
+                    <Link
+                      href="/characters/new"
+                      className="w-full cursor-pointer flex items-center gap-2 text-primary font-medium"
+                    >
                       <Sparkles className="w-4 h-4" /> Criar Personagem
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={handleLogout} 
+                  <DropdownMenuItem
+                    onClick={handleLogout}
                     className="w-full cursor-pointer text-destructive focus:text-destructive flex items-center gap-2"
                   >
                     <LogOut className="w-4 h-4" /> Sair
@@ -141,10 +177,17 @@ export function Navbar() {
               ) : (
                 <>
                   <DropdownMenuItem asChild>
-                    <Link href="/login" className="w-full cursor-pointer">Entrar</Link>
+                    <Link href="/login" className="w-full cursor-pointer">
+                      Entrar
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/register" className="w-full cursor-pointer text-primary font-medium">Começar Jornada</Link>
+                    <Link
+                      href="/register"
+                      className="w-full cursor-pointer text-primary font-medium"
+                    >
+                      Cadastrar
+                    </Link>
                   </DropdownMenuItem>
                 </>
               )}
