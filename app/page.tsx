@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,12 +30,16 @@ export default function Home() {
             Gerencie campanhas, NPCs e fichas de personagens com uma interface moderna construída sob Clean Architecture.
           </p>
           <div className="flex flex-col w-full sm:w-auto sm:flex-row gap-4 pt-4">
+            <Link href="/characters">
             <Button size="lg" className="w-full sm:w-auto text-base md:text-lg px-6 py-4 md:px-8 md:py-6 rounded-xl shadow-lg hover:shadow-xl transition-all">
-              Criar minha Campanha
+              Acessar Personagens
             </Button>
+            </Link>
+            <Link href="https://github.com/Kevinrehem/Dungeoneer" target="_blank">
             <Button size="lg" variant="outline" className="w-full sm:w-auto text-base md:text-lg px-6 py-4 md:px-8 md:py-6 rounded-xl border-2">
               Ver Documentação
             </Button>
+            </Link>
           </div>
         </section>
 
