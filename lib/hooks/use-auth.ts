@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { UserProfile, getStoredToken, getStoredUser, clearAuth } from "@/lib/api/auth";
 import { apiFetch } from "@/lib/api/client";
 
@@ -34,10 +34,15 @@ export function useAuth() {
     let isMounted = true;
     setIsLoading(true);
 
-    apiFetch("/api/characters", {
+    apiFetch<UserProfile>("/api/auth/me", {
       method: "GET",
       suppressErrorToast: true,
     })
+      .then((freshUser) => {
+        if (isMounted && freshUser) {
+          setUser(freshUser);
+        }
+      })
       .catch((err: any) => {
         if (isMounted && (err?.status === 401 || err?.status === 404)) {
           clearAuth();
@@ -60,11 +65,23 @@ export function useAuth() {
     syncAuth();
   }, [syncAuth]);
 
+  const isDM = useMemo(() => {
+    if (!token || !user?.roles || !Array.isArray(user.roles)) return false;
+    return user.roles.includes("DUNGEON_MASTER");
+  }, [token, user]);
+
+  const isPlayer = useMemo(() => {
+    if (!token || !user?.roles || !Array.isArray(user.roles)) return false;
+    return user.roles.includes("PLAYER");
+  }, [token, user]);
+
   return {
     user,
     token,
     isAuthenticated: !!token,
     isLoading,
+    isDM,
+    isPlayer,
     logout,
     syncAuth,
   };
