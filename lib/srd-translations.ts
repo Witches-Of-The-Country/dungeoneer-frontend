@@ -342,6 +342,70 @@ export const CLASS_SKILL_OPTIONS: Record<string, ClassSkillConfig> = {
     count: 2,
     skills: ["Arcana", "History", "Investigation", "Medicine", "Nature", "Perception", "Sleight of Hand"],
   },
+  // Portuguese aliases
+  Bárbaro: {
+    count: 2,
+    skills: ["Animal Handling", "Athletics", "Intimidation", "Nature", "Perception", "Survival"],
+  },
+  Bardo: {
+    count: 3,
+  },
+  Clérigo: {
+    count: 2,
+    skills: ["History", "Insight", "Medicine", "Persuasion", "Religion"],
+  },
+  Druida: {
+    count: 2,
+    skills: ["Animal Handling", "Arcana", "Insight", "Medicine", "Nature", "Perception", "Religion", "Survival"],
+  },
+  Guerreiro: {
+    count: 2,
+    skills: ["Acrobatics", "Animal Handling", "Athletics", "History", "Insight", "Intimidation", "Perception", "Survival"],
+  },
+  Monge: {
+    count: 2,
+    skills: ["Acrobatics", "Athletics", "History", "Insight", "Religion", "Stealth"],
+  },
+  Paladino: {
+    count: 2,
+    skills: ["Athletics", "Insight", "Intimidation", "Medicine", "Persuasion", "Religion"],
+  },
+  Patrulheiro: {
+    count: 3,
+    skills: ["Animal Handling", "Athletics", "Insight", "Investigation", "Nature", "Perception", "Stealth", "Survival"],
+  },
+  Ladino: {
+    count: 4,
+    skills: [
+      "Acrobatics",
+      "Athletics",
+      "Deception",
+      "Insight",
+      "Intimidation",
+      "Investigation",
+      "Perception",
+      "Performance",
+      "Persuasion",
+      "Sleight of Hand",
+      "Stealth",
+    ],
+  },
+  Feiticeiro: {
+    count: 2,
+    skills: ["Arcana", "Deception", "Insight", "Intimidation", "Persuasion", "Religion"],
+  },
+  Bruxo: {
+    count: 2,
+    skills: ["Arcana", "Deception", "History", "Intimidation", "Investigation", "Nature", "Religion"],
+  },
+  Mago: {
+    count: 2,
+    skills: ["Arcana", "History", "Insight", "Investigation", "Medicine", "Religion"],
+  },
+  Artífice: {
+    count: 2,
+    skills: ["Arcana", "History", "Investigation", "Medicine", "Nature", "Perception", "Sleight of Hand"],
+  },
 };
 
 /**

@@ -147,7 +147,7 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     expect(nextButton).not.toBeDisabled();
   });
 
-  it('Bug 1: blocks HP rolling in Step 1 when level > 1 and method is ROLLED until class is selected', async () => {
+  it('Step 3: manages Initial Level, HP rolling with per-class cache, multiclass distribution, and class skills selection', async () => {
     vi.spyOn(apiClient, 'apiFetch').mockImplementation(
       async (endpoint: string, options?: apiClient.ApiRequestOptions) => {
         if (endpoint.startsWith('/api/reference/lineages')) {
@@ -175,15 +175,41 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
               spellcastingType: 'NONE',
               ruleset: 'SRD_2024',
             },
+            {
+              id: 'cls-wizard-2',
+              name: 'Mago',
+              hitDice: 'd6',
+              primaryAbility: 'INTELLIGENCE',
+              savingThrowProficiencies: ['INTELLIGENCE', 'WISDOM'],
+              spellcastingType: 'FULL',
+              ruleset: 'SRD_2024',
+            },
           ];
         }
         if (endpoint.startsWith('/api/reference/backgrounds')) {
-          return [];
+          return [
+            {
+              id: 'bg-1',
+              name: 'Soldado',
+              description: 'Veterano.',
+              skillProficiencies: ['Athletics', 'Intimidation'],
+              allowedAbilityBonuses: ['STR', 'DEX', 'CON'],
+              originFeatName: 'Atacante Selvagem',
+              ruleset: 'SRD_2024',
+            },
+          ];
         }
         if (endpoint === '/api/characters/hp-rolls' && options?.method === 'POST') {
+          const body = JSON.parse(String(options.body));
+          if (body.archetypeId === 'cls-fighter-1') {
+            return {
+              rollId: 'hp-roll-fighter',
+              rolledHpPerLevel: [8, 7],
+            };
+          }
           return {
-            rollId: 'hp-roll-001',
-            rolledHpPerLevel: [8, 7],
+            rollId: 'hp-roll-wizard',
+            rolledHpPerLevel: [4, 5],
           };
         }
         return undefined;
@@ -192,19 +218,74 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
 
     renderWithQuery(<CharacterCreationWizardPage />);
 
-    // In Step 1, set level to 3
-    fireEvent.change(screen.getByLabelText(/Nível \(1 a 20\)/i), {
-      target: { value: '3' },
+    // In Step 1, enter name and proceed
+    fireEvent.change(screen.getByLabelText(/Nome do Personagem/i), {
+      target: { value: 'Conan' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 2 — Linhagem/i);
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 3 — Classe/i);
+
+    // In Step 3: Set level to 3
+    const levelInput = screen.getByLabelText(/Nível Inicial/i);
+    fireEvent.change(levelInput, { target: { value: '3' } });
+
+    // Select Guerreiro class
+    fireEvent.click(await screen.findByRole('button', { name: /Guerreiro/i }));
 
     // Select ROLLED HP calculation method
-    fireEvent.click(screen.getByRole('button', { name: /Rolar Dados/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rolado' }));
 
-    // Verify HP roll button is disabled and warning message is present
+    // Trigger HP roll for Guerreiro
     const hpRollButton = screen.getByTestId('hp-roll-button');
-    expect(hpRollButton).toBeDisabled();
+    expect(hpRollButton).not.toBeDisabled();
+    fireEvent.click(hpRollButton);
+    expect(await screen.findByText(/Rolagens: \[8, 7\]/i)).toBeInTheDocument();
 
-    const warning = screen.getByTestId('hp-roll-warning');
-    expect(warning).toHaveTextContent(/Selecione uma classe primeiro/i);
+    // Switch class to Mago: Guerreiro roll is preserved in cache, Mago needs roll
+    fireEvent.click(await screen.findByRole('button', { name: /Mago/i }));
+    expect(screen.queryByText(/Rolagens: \[8, 7\]/i)).not.toBeInTheDocument();
+
+    // Switch back to Guerreiro: Roll is restored from cache!
+    fireEvent.click(await screen.findByRole('button', { name: /Guerreiro/i }));
+    expect(await screen.findByText(/Rolagens: \[8, 7\]/i)).toBeInTheDocument();
+
+    // Test Class Skills selection
+    const skillCounter = screen.getByTestId('class-skills-counter');
+    expect(skillCounter).toHaveTextContent('0 / 2 selecionada(s)');
+
+    // Select Atletismo (Athletics)
+    const athleticsBtn = screen.getByRole('button', { name: 'Atletismo' });
+    fireEvent.click(athleticsBtn);
+    expect(skillCounter).toHaveTextContent('1 / 2 selecionada(s)');
+
+    // Test Multiclass level distribution
+    const addMulticlassBtn = screen.getByRole('button', { name: /Adicionar Classe Secundária/i });
+    fireEvent.click(addMulticlassBtn);
+
+    // Initial multiclass allocation: primary = 2, secondary = 1 (sum = 3)
+    const levelsBadge = screen.getByTestId('multiclass-levels-badge');
+    expect(levelsBadge).toHaveTextContent('Soma: 3 / 3');
+
+    // Tamper primary level to 1 (sum becomes 2 != 3)
+    const primaryLvlInput = screen.getByLabelText(/Nível da classe principal/i);
+    fireEvent.change(primaryLvlInput, { target: { value: '1' } });
+    expect(levelsBadge).toHaveTextContent('Soma: 2 / 3');
+
+    // Attempting to advance when sum != 3 must block advancement
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    expect(screen.queryByText(/Passo 4 — Antecedente/i)).not.toBeInTheDocument();
+
+    // Restore sum to 3 (primary = 2, secondary = 1)
+    fireEvent.change(primaryLvlInput, { target: { value: '2' } });
+    expect(levelsBadge).toHaveTextContent('Soma: 3 / 3');
+
+    // Advancing now succeeds into Step 4
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 4 — Antecedente/i);
+
+    // Step 4 collision detection: 'Athletics' (Atletismo) was selected in class and also in Soldado background!
+    expect(await screen.findByText(/Colisão de Perícias Detectada/i)).toBeInTheDocument();
   });
 });

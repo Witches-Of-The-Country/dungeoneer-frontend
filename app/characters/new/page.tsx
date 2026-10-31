@@ -30,6 +30,8 @@ import {
   Plus,
   Minus,
   RotateCcw,
+  AlertCircle,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,12 +59,18 @@ import {
   AbilityKey,
   ABILITY_KEYS,
   ABILITY_LABELS,
+  DND_SKILLS,
+  ClassProgressionPayload,
   normalizeAbilityKey,
   calculateModifier,
   formatModifier,
   calculateProficiencyBonus,
   calculatePointBuyTotal,
 } from "@/lib/api/characters";
+import {
+  CLASS_SKILL_OPTIONS,
+  translateReferenceName,
+} from "@/lib/srd-translations";
 
 const WIZARD_STEPS = [
   { title: "Nome & Regras" },
@@ -83,8 +91,6 @@ export const wizardStep1Schema = z.object({
     .min(1, "O nome do personagem é obrigatório.")
     .max(100, "O nome deve ter no máximo 100 caracteres."),
   ruleset: z.enum(["SRD_2014", "SRD_2024"]),
-  level: z.number().int().min(1).max(20),
-  hpCalculationMethod: z.enum(["MAX", "AVERAGE", "ROLLED"]),
 });
 
 type WizardStep1Values = z.infer<typeof wizardStep1Schema>;
@@ -247,18 +253,24 @@ export default function CharacterCreationWizardPage() {
     defaultValues: {
       name: "",
       ruleset: "SRD_2024",
-      level: 1,
-      hpCalculationMethod: "MAX",
     },
     mode: "onChange",
   });
 
   const watchedName = step1Form.watch("name");
   const watchedRuleset = step1Form.watch("ruleset") as Ruleset;
-  const watchedLevel = step1Form.watch("level");
-  const watchedHpMethod = step1Form.watch(
-    "hpCalculationMethod"
-  ) as HpCalculationMethod;
+
+  // Step 3 Level, HP & Multiclass State
+  const [characterLevel, setCharacterLevel] = useState<number>(1);
+  const [primaryClassLevel, setPrimaryClassLevel] = useState<number>(1);
+  const [secondaryClasses, setSecondaryClasses] = useState<
+    { classId: string; classLevel: number }[]
+  >([]);
+  const [hpMethod, setHpMethod] = useState<HpCalculationMethod>("MAX");
+  const [hpRollsByClass, setHpRollsByClass] = useState<
+    Record<string, { rollId: string; rolledHpPerLevel: number[] }>
+  >({});
+  const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
 
   // Queries for Reference Data
   const { data: lineages = [], isLoading: loadingLineages } =
@@ -314,12 +326,85 @@ export default function CharacterCreationWizardPage() {
     [backgrounds, selectedBackgroundId]
   );
 
-  // Step 1/3 HP Roll State (when level > 1 and method === ROLLED)
+  // Step 3 Level, HP & Multiclass Handlers
   const hpRollMutation = useRollHitPoints();
-  const [hpRollData, setHpRollData] = useState<{
-    rollId: string;
-    rolledHpPerLevel: number[];
-  } | null>(null);
+
+  const totalClassLevels = useMemo(() => {
+    return (
+      primaryClassLevel +
+      secondaryClasses.reduce((acc, sc) => acc + sc.classLevel, 0)
+    );
+  }, [primaryClassLevel, secondaryClasses]);
+
+  const handleLevelChange = (lvl: number) => {
+    const validLevel = Math.min(20, Math.max(1, lvl));
+    setCharacterLevel(validLevel);
+    if (secondaryClasses.length === 0) {
+      setPrimaryClassLevel(validLevel);
+    } else {
+      const secondarySum = secondaryClasses.reduce(
+        (acc, sc) => acc + sc.classLevel,
+        0
+      );
+      if (secondarySum >= validLevel) {
+        setSecondaryClasses([]);
+        setPrimaryClassLevel(validLevel);
+      } else {
+        setPrimaryClassLevel(validLevel - secondarySum);
+      }
+    }
+  };
+
+  const handleAddSecondaryClass = () => {
+    const available = classes.filter(
+      (c) =>
+        c.id !== selectedClassId &&
+        !secondaryClasses.some((sc) => sc.classId === c.id)
+    );
+    if (available.length === 0) {
+      toast.error("Todas as classes disponíveis já foram adicionadas.");
+      return;
+    }
+    let nextPrimary = primaryClassLevel;
+    if (nextPrimary > 1) {
+      nextPrimary -= 1;
+      setPrimaryClassLevel(nextPrimary);
+    }
+    setSecondaryClasses((prev) => [
+      ...prev,
+      { classId: available[0].id, classLevel: 1 },
+    ]);
+  };
+
+  const handleRemoveSecondaryClass = (index: number) => {
+    setSecondaryClasses((prev) => {
+      const removed = prev[index];
+      const next = prev.filter((_, i) => i !== index);
+      setPrimaryClassLevel((p) => p + removed.classLevel);
+      return next;
+    });
+  };
+
+  const handleUpdateSecondaryClass = (
+    index: number,
+    field: "classId" | "classLevel",
+    val: string | number
+  ) => {
+    setSecondaryClasses((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        if (field === "classId") {
+          return { ...item, classId: String(val) };
+        } else {
+          return { ...item, classLevel: Math.max(1, Number(val) || 1) };
+        }
+      })
+    );
+  };
+
+  const activeClassHpRoll = selectedClassId
+    ? hpRollsByClass[selectedClassId] ?? null
+    : null;
 
   const handleRollHp = async () => {
     if (!selectedClassId) {
@@ -329,17 +414,75 @@ export default function CharacterCreationWizardPage() {
     try {
       const res = await hpRollMutation.mutateAsync({
         archetypeId: selectedClassId,
-        level: watchedLevel,
+        level: characterLevel,
       });
-      setHpRollData({
-        rollId: res.rollId,
-        rolledHpPerLevel: res.rolledHpPerLevel,
-      });
+      setHpRollsByClass((prev) => ({
+        ...prev,
+        [selectedClassId]: {
+          rollId: res.rollId,
+          rolledHpPerLevel: res.rolledHpPerLevel,
+        },
+      }));
       toast.success("Pontos de Vida rolados no servidor!");
     } catch {
       // handled by apiFetch
     }
   };
+
+  // Class Skills Selection
+  const classSkillConfig = useMemo(() => {
+    if (!selectedClass) return null;
+    return CLASS_SKILL_OPTIONS[selectedClass.name] ?? null;
+  }, [selectedClass]);
+
+  const maxClassSkills = classSkillConfig?.count ?? 2;
+  const availableSkills = useMemo(() => {
+    if (classSkillConfig?.skills && classSkillConfig.skills.length > 0) {
+      return classSkillConfig.skills;
+    }
+    return DND_SKILLS.map((s) => s.enName);
+  }, [classSkillConfig]);
+
+  useEffect(() => {
+    setSelectedClassSkills((prev) => {
+      const valid = prev.filter((s) => availableSkills.includes(s));
+      return valid.slice(0, maxClassSkills);
+    });
+  }, [availableSkills, maxClassSkills]);
+
+  const toggleClassSkill = (skill: string) => {
+    setSelectedClassSkills((prev) => {
+      if (prev.includes(skill)) {
+        return prev.filter((s) => s !== skill);
+      }
+      if (prev.length >= maxClassSkills) {
+        toast.error(
+          `Você só pode escolher até ${maxClassSkills} perícias para esta classe.`
+        );
+        return prev;
+      }
+      return [...prev, skill];
+    });
+  };
+
+  // Step 4 Background Skills & Collision Detection
+  const backgroundSkills = useMemo(() => {
+    return selectedBackground?.skillProficiencies ?? [];
+  }, [selectedBackground]);
+
+  const collidingSkills = useMemo(() => {
+    return backgroundSkills.filter((bs) =>
+      selectedClassSkills.some((cs) => {
+        const csNorm = cs.trim().toLowerCase();
+        const bsNorm = bs.trim().toLowerCase();
+        return (
+          csNorm === bsNorm ||
+          translateReferenceName(cs).toLowerCase() ===
+            translateReferenceName(bs).toLowerCase()
+        );
+      })
+    );
+  }, [backgroundSkills, selectedClassSkills]);
 
   // Step 4 — 2024 Background ASI Distribution (+2/+1 or +1/+1/+1)
   const [asiMode2024, setAsiMode2024] = useState<"2_1" | "1_1_1">("2_1");
@@ -674,18 +817,18 @@ export default function CharacterCreationWizardPage() {
     );
 
     let maxHp = hitDieFaces + conMod;
-    if (watchedLevel > 1) {
-      if (watchedHpMethod === "MAX") {
-        maxHp += (watchedLevel - 1) * (hitDieFaces + conMod);
-      } else if (watchedHpMethod === "ROLLED" && hpRollData?.rolledHpPerLevel) {
-        const sumRolls = hpRollData.rolledHpPerLevel.reduce(
+    if (characterLevel > 1) {
+      if (hpMethod === "MAX") {
+        maxHp += (characterLevel - 1) * (hitDieFaces + conMod);
+      } else if (hpMethod === "ROLLED" && activeClassHpRoll?.rolledHpPerLevel) {
+        const sumRolls = activeClassHpRoll.rolledHpPerLevel.reduce(
           (a, b) => a + b,
           0
         );
-        maxHp += sumRolls + (watchedLevel - 1) * conMod;
+        maxHp += sumRolls + (characterLevel - 1) * conMod;
       } else {
         const avgPerLevel = Math.floor(hitDieFaces / 2) + 1;
-        maxHp += (watchedLevel - 1) * (avgPerLevel + conMod);
+        maxHp += (characterLevel - 1) * (avgPerLevel + conMod);
       }
     }
 
@@ -694,15 +837,15 @@ export default function CharacterCreationWizardPage() {
       ac: 10 + dexMod,
       initiative: dexMod,
       speed: selectedLineage?.speed ?? 30,
-      proficiencyBonus: calculateProficiencyBonus(watchedLevel),
+      proficiencyBonus: calculateProficiencyBonus(characterLevel),
     };
   }, [
     finalAbilityScores,
     selectedClass,
     selectedLineage,
-    watchedLevel,
-    watchedHpMethod,
-    hpRollData,
+    characterLevel,
+    hpMethod,
+    activeClassHpRoll,
   ]);
 
   // Navigation Handlers
@@ -710,6 +853,24 @@ export default function CharacterCreationWizardPage() {
     if (currentStep === 1) {
       const valid = await step1Form.trigger();
       if (!valid) return;
+    }
+    if (currentStep === 3) {
+      if (!selectedClassId) {
+        toast.error("Selecione uma classe antes de avançar.");
+        return;
+      }
+      if (totalClassLevels !== characterLevel) {
+        toast.error(
+          `A soma dos níveis das classes (${totalClassLevels}) deve ser exatamente igual ao nível total selecionado (${characterLevel}).`
+        );
+        return;
+      }
+      if (characterLevel > 1 && hpMethod === "ROLLED" && !activeClassHpRoll) {
+        toast.error(
+          "Role os dados de vida para a classe selecionada antes de avançar."
+        );
+        return;
+      }
     }
     if (currentStep === 5 && !isStep5Valid) {
       toast.error("Distribua todos os 6 atributos antes de avançar.");
@@ -738,10 +899,28 @@ export default function CharacterCreationWizardPage() {
       }
     }
 
+    const classProgressionsPayload: ClassProgressionPayload[] = [
+      {
+        archetypeId: selectedClassId,
+        classLevel: primaryClassLevel,
+      },
+      ...secondaryClasses.map((sc) => ({
+        archetypeId: sc.classId,
+        classLevel: sc.classLevel,
+      })),
+    ];
+
+    const consolidatedSkills = Array.from(
+      new Set([
+        ...selectedClassSkills,
+        ...(selectedBackground?.skillProficiencies ?? []),
+      ])
+    );
+
     try {
       const created = await createCharacterMutation.mutateAsync({
         name: watchedName.trim(),
-        level: watchedLevel,
+        level: characterLevel,
         ruleset: watchedRuleset,
         lineageId: selectedLineageId,
         backgroundId: selectedBackgroundId,
@@ -753,11 +932,17 @@ export default function CharacterCreationWizardPage() {
             ? abilityScoreBonusesPayload
             : undefined,
         abilityRollId: abilityMethod === "ROLLED" ? abilityRollId : undefined,
-        hpCalculationMethod: watchedLevel > 1 ? watchedHpMethod : "MAX",
+        hpCalculationMethod: characterLevel > 1 ? hpMethod : "MAX",
         hpRollId:
-          watchedLevel > 1 && watchedHpMethod === "ROLLED"
-            ? hpRollData?.rollId
+          characterLevel > 1 && hpMethod === "ROLLED"
+            ? activeClassHpRoll?.rollId
             : undefined,
+        classProgressions:
+          classProgressionsPayload.length > 0
+            ? classProgressionsPayload
+            : undefined,
+        skillProficiencies:
+          consolidatedSkills.length > 0 ? consolidatedSkills : undefined,
       });
 
       if (typeof window !== "undefined") {
@@ -800,8 +985,7 @@ export default function CharacterCreationWizardPage() {
                   Passo 1 — Nome &amp; Regras
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Defina o nome do seu herói, a edição de regras e o nível
-                  inicial.
+                  Defina o nome do seu herói e a edição de regras.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -872,102 +1056,6 @@ export default function CharacterCreationWizardPage() {
                       );
                     })}
                   </div>
-                </div>
-
-                {/* Initial Level */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="character-level" className="text-amber-100">
-                      Nível Inicial (1–20)
-                    </Label>
-                    <Input
-                      id="character-level"
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={watchedLevel}
-                      onChange={(e) => {
-                        const lvl = Math.min(
-                          20,
-                          Math.max(1, Number(e.target.value) || 1)
-                        );
-                        step1Form.setValue("level", lvl, {
-                          shouldValidate: true,
-                        });
-                      }}
-                      className="bg-slate-950 border-amber-900/50 text-amber-50 font-mono"
-                    />
-                  </div>
-
-                  {/* HP Method when level > 1 */}
-                  {watchedLevel > 1 && (
-                    <div className="space-y-2">
-                      <Label className="text-amber-100">
-                        Cálculo de Pontos de Vida (Nível &gt; 1)
-                      </Label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(
-                          [
-                            { id: "MAX", label: "Máximo" },
-                            { id: "AVERAGE", label: "Média" },
-                            { id: "ROLLED", label: "Rolado" },
-                          ] as const
-                        ).map((m) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() =>
-                              step1Form.setValue("hpCalculationMethod", m.id)
-                            }
-                            className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                              watchedHpMethod === m.id
-                                ? "border-amber-500 bg-amber-500/20 text-amber-200"
-                                : "border-amber-900/40 bg-slate-950 text-slate-400"
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {watchedHpMethod === "ROLLED" && (
-                        <div className="pt-2 flex flex-col gap-1.5">
-                          <div className="flex items-center gap-3">
-                            <Button
-                              type="button"
-                              size="sm"
-                              data-testid="hp-roll-button"
-                              disabled={
-                                !selectedClassId ||
-                                Boolean(hpRollData) ||
-                                hpRollMutation.isPending
-                              }
-                              onClick={handleRollHp}
-                              className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <Dices className="w-4 h-4 mr-1.5" />
-                              {hpRollData
-                                ? "Dados de Vida Rolados"
-                                : "Rolar Dados de Vida"}
-                            </Button>
-                            {hpRollData && (
-                              <span className="text-xs font-mono text-amber-300">
-                                Rolagens: [{hpRollData.rolledHpPerLevel.join(", ")}]
-                              </span>
-                            )}
-                          </div>
-                          {!selectedClassId && (
-                            <p
-                              data-testid="hp-roll-warning"
-                              className="text-xs text-amber-400/90 flex items-center gap-1"
-                            >
-                              Selecione uma classe primeiro
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1078,10 +1166,10 @@ export default function CharacterCreationWizardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl font-serif text-amber-200">
                   <Shield className="w-6 h-6 text-amber-500" />
-                  Passo 3 — Classe
+                  Passo 3 — Classe &amp; Nível
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Sua classe define suas aptidões marciais ou arcanas.
+                  Defina a classe principal, nível do personagem, cálculo de pontos de vida e perícias de classe.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1091,7 +1179,10 @@ export default function CharacterCreationWizardPage() {
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                      <Label className="text-amber-200 text-xs uppercase font-bold tracking-wider block mb-1">
+                        Classe Principal
+                      </Label>
                       {classes.map((cls) => (
                         <button
                           key={cls.id}
@@ -1113,43 +1204,284 @@ export default function CharacterCreationWizardPage() {
                     </div>
 
                     {selectedClass && (
-                      <div className="lg:col-span-2 p-5 rounded-xl bg-slate-950/80 border border-amber-900/40 space-y-4">
-                        <div className="flex items-center justify-between border-b border-amber-900/30 pb-3">
-                          <div>
-                            <h3 className="text-xl font-serif font-bold text-amber-300">
-                              {selectedClass.name}
-                            </h3>
-                            <p className="text-xs text-slate-400">
-                              Atributo Principal: {selectedClass.primaryAbility}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-mono font-bold">
-                              Dado de Vida: {selectedClass.hitDice.toUpperCase()}
-                            </span>
-                            {selectedClass.spellcastingType !== "NONE" && (
-                              <span className="px-2.5 py-1 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 text-xs font-semibold">
-                                Conjurador ({selectedClass.spellcastingType})
+                      <div className="lg:col-span-2 space-y-5">
+                        {/* Class Info Box */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/40 space-y-3">
+                          <div className="flex items-center justify-between border-b border-amber-900/30 pb-3">
+                            <div>
+                              <h3 className="text-xl font-serif font-bold text-amber-300">
+                                {selectedClass.name}
+                              </h3>
+                              <p className="text-xs text-slate-400">
+                                Atributo Principal: {selectedClass.primaryAbility}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-mono font-bold">
+                                Dado de Vida: {selectedClass.hitDice.toUpperCase()}
                               </span>
-                            )}
+                              {selectedClass.spellcastingType !== "NONE" && (
+                                <span className="px-2.5 py-1 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 text-xs font-semibold">
+                                  Conjurador ({selectedClass.spellcastingType})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <span className="text-xs font-semibold uppercase text-slate-400 block">
+                              Proficiências em Salvaguardas
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {(selectedClass.savingThrowProficiencies ?? []).map((st) => (
+                                <span
+                                  key={st}
+                                  className="px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 font-semibold"
+                                >
+                                  {st}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <span className="text-xs font-semibold uppercase text-slate-400 block">
-                            Proficiências em Salvaguardas
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            {(
-                              selectedClass.savingThrowProficiencies ?? []
-                            ).map((st) => (
+                        {/* Initial Level Selector */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="character-level" className="text-amber-100 font-serif font-bold text-sm">
+                              Nível Inicial do Personagem (1–20)
+                            </Label>
+                            <span className="text-xs font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                              Nível {characterLevel}
+                            </span>
+                          </div>
+                          <Input
+                            id="character-level"
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={characterLevel}
+                            onChange={(e) => handleLevelChange(Number(e.target.value) || 1)}
+                            className="bg-slate-900 border-amber-900/50 text-amber-50 font-mono text-base"
+                          />
+                        </div>
+
+                        {/* HP Method & Roll when level > 1 */}
+                        {characterLevel > 1 && (
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
+                            <Label className="text-amber-100 font-serif font-bold text-sm block">
+                              Cálculo de Pontos de Vida (Nível &gt; 1)
+                            </Label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {(
+                                [
+                                  { id: "MAX", label: "Máximo" },
+                                  { id: "AVERAGE", label: "Média" },
+                                  { id: "ROLLED", label: "Rolado" },
+                                ] as const
+                              ).map((m) => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => setHpMethod(m.id)}
+                                  className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all ${
+                                    hpMethod === m.id
+                                      ? "border-amber-500 bg-amber-500/20 text-amber-200"
+                                      : "border-amber-900/40 bg-slate-950 text-slate-400"
+                                  }`}
+                                >
+                                  {m.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {hpMethod === "ROLLED" && (
+                              <div className="pt-2 flex flex-col gap-1.5">
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    data-testid="hp-roll-button"
+                                    disabled={
+                                      !selectedClassId ||
+                                      Boolean(activeClassHpRoll) ||
+                                      hpRollMutation.isPending
+                                    }
+                                    onClick={handleRollHp}
+                                    className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <Dices className="w-4 h-4 mr-1.5" />
+                                    {activeClassHpRoll
+                                      ? "Dados de Vida Rolados"
+                                      : `Rolar Dados de Vida (${selectedClass?.name})`}
+                                  </Button>
+                                  {activeClassHpRoll && (
+                                    <span className="text-xs font-mono text-amber-300">
+                                      Rolagens: [{activeClassHpRoll.rolledHpPerLevel.join(", ")}]
+                                    </span>
+                                  )}
+                                </div>
+                                {!selectedClassId && (
+                                  <p
+                                    data-testid="hp-roll-warning"
+                                    className="text-xs text-amber-400/90 flex items-center gap-1"
+                                  >
+                                    Selecione uma classe primeiro
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Multiclass Distribution when level > 1 */}
+                        {characterLevel > 1 && (
+                          <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-amber-100 font-serif font-bold text-sm">
+                                Distribuição de Classes (Multiclasse)
+                              </Label>
                               <span
-                                key={st}
-                                className="px-3 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 font-semibold"
+                                data-testid="multiclass-levels-badge"
+                                className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+                                  totalClassLevels === characterLevel
+                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                    : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                }`}
                               >
-                                {st}
+                                Soma: {totalClassLevels} / {characterLevel}
                               </span>
+                            </div>
+
+                            {/* Primary class row */}
+                            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-amber-900/40">
+                              <span className="text-xs font-bold text-amber-200">
+                                {selectedClass.name} (Principal)
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400">Nível:</span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={characterLevel}
+                                  value={primaryClassLevel}
+                                  onChange={(e) =>
+                                    setPrimaryClassLevel(Math.max(1, Number(e.target.value) || 1))
+                                  }
+                                  aria-label="Nível da classe principal"
+                                  className="w-16 h-7 text-xs bg-slate-950 border-amber-900/50 text-amber-100 font-mono text-center"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Secondary classes list */}
+                            {secondaryClasses.map((sec, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800"
+                              >
+                                <select
+                                  value={sec.classId}
+                                  onChange={(e) =>
+                                    handleUpdateSecondaryClass(idx, "classId", e.target.value)
+                                  }
+                                  aria-label={`Classe secundária ${idx + 1}`}
+                                  className="bg-slate-950 border border-amber-900/40 rounded px-2 py-1 text-xs text-amber-100 font-serif"
+                                >
+                                  {classes
+                                    .filter(
+                                      (c) =>
+                                        c.id === sec.classId ||
+                                        (c.id !== selectedClassId &&
+                                          !secondaryClasses.some((sc) => sc.classId === c.id))
+                                    )
+                                    .map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                </select>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400">Nível:</span>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={characterLevel - 1}
+                                    value={sec.classLevel}
+                                    onChange={(e) =>
+                                      handleUpdateSecondaryClass(idx, "classLevel", e.target.value)
+                                    }
+                                    aria-label={`Nível da classe secundária ${idx + 1}`}
+                                    className="w-16 h-7 text-xs bg-slate-950 border-amber-900/50 text-amber-100 font-mono text-center"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label={`Remover classe secundária ${idx + 1}`}
+                                    onClick={() => handleRemoveSecondaryClass(idx)}
+                                    className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-slate-800"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
                             ))}
+
+                            <div className="flex items-center justify-between pt-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAddSecondaryClass}
+                                disabled={classes.length <= secondaryClasses.length + 1}
+                                className="text-xs border-amber-900/50 bg-slate-950 hover:bg-slate-800 text-amber-200"
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1" />
+                                Adicionar Classe Secundária
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Class Skills Selection */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-amber-100 font-serif font-bold text-sm">
+                              Perícias de Treinamento da Classe
+                            </Label>
+                            <span
+                              data-testid="class-skills-counter"
+                              className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30"
+                            >
+                              {selectedClassSkills.length} / {maxClassSkills} selecionada(s)
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            Escolha até {maxClassSkills} perícias concedidas pela classe {selectedClass.name}.
+                          </p>
+
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {availableSkills.map((sk) => {
+                              const isSelected = selectedClassSkills.includes(sk);
+                              const ptName = translateReferenceName(sk);
+                              return (
+                                <button
+                                  key={sk}
+                                  type="button"
+                                  onClick={() => toggleClassSkill(sk)}
+                                  aria-pressed={isSelected}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                    isSelected
+                                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-200 shadow"
+                                      : "border-slate-800 bg-slate-900 text-slate-400 hover:border-amber-700/50 hover:text-slate-200"
+                                  }`}
+                                >
+                                  {ptName}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -1217,17 +1549,44 @@ export default function CharacterCreationWizardPage() {
                           </span>
                           <div className="flex flex-wrap gap-2">
                             {(selectedBackground.skillProficiencies ?? []).map(
-                              (sk) => (
-                                <span
-                                  key={sk}
-                                  className="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs font-semibold"
-                                >
-                                  {sk}
-                                </span>
-                              )
+                              (sk) => {
+                                const isCollision = collidingSkills.some(
+                                  (cs) => cs.trim().toLowerCase() === sk.trim().toLowerCase()
+                                );
+                                return (
+                                  <span
+                                    key={sk}
+                                    className={`px-2.5 py-1 rounded text-xs font-semibold border ${
+                                      isCollision
+                                        ? "bg-amber-500/20 text-amber-200 border-amber-500/50"
+                                        : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                    }`}
+                                  >
+                                    {translateReferenceName(sk)}
+                                    {isCollision && " (Já escolhida na Classe)"}
+                                  </span>
+                                );
+                              }
                             )}
                           </div>
                         </div>
+
+                        {collidingSkills.length > 0 && (
+                          <div className="p-3.5 rounded-lg bg-amber-950/40 border border-amber-600/50 flex items-start gap-2.5 text-xs text-amber-200">
+                            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-amber-300 block mb-0.5">
+                                Colisão de Perícias Detectada
+                              </span>
+                              A(s) perícia(s){" "}
+                              <span className="font-semibold text-amber-100">
+                                {collidingSkills.map((s) => translateReferenceName(s)).join(", ")}
+                              </span>{" "}
+                              já foi/foram selecionada(s) nas escolhas da sua classe. Pelas regras de D&amp;D 5e,
+                              você pode personalizar a perícia duplicada ou trocá-la voltando ao Passo 3.
+                            </div>
+                          </div>
+                        )}
 
                         {watchedRuleset === "SRD_2024" && (
                           <div className="space-y-4 pt-2 border-t border-amber-900/30">
@@ -1626,8 +1985,18 @@ export default function CharacterCreationWizardPage() {
                       {watchedName || "Aventureiro Sem Nome"}
                     </h3>
                     <p className="text-sm text-slate-300 mt-1">
-                      Nível {watchedLevel} • {selectedLineage?.name ?? "Linhagem"}{" "}
-                      • {selectedClass?.name ?? "Classe"} •{" "}
+                      Nível {characterLevel} • {selectedClass?.name ?? "Classe"}
+                      {secondaryClasses.length > 0 &&
+                        ` (${primaryClassLevel}) / ${secondaryClasses
+                          .map(
+                            (sc) =>
+                              `${
+                                classes.find((c) => c.id === sc.classId)
+                                  ?.name ?? "Classe"
+                              } (${sc.classLevel})`
+                          )
+                          .join(" / ")}`}{" "}
+                      • {selectedLineage?.name ?? "Linhagem"} •{" "}
                       {selectedBackground?.name ?? "Antecedente"}
                     </p>
                   </div>
@@ -1694,6 +2063,28 @@ export default function CharacterCreationWizardPage() {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Consolidated Skills Summary */}
+                <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/40 space-y-2">
+                  <span className="text-xs font-semibold uppercase text-slate-400 block">
+                    Perícias de Treinamento Consolidadas
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(
+                      new Set([
+                        ...selectedClassSkills,
+                        ...(selectedBackground?.skillProficiencies ?? []),
+                      ])
+                    ).map((sk) => (
+                      <span
+                        key={sk}
+                        className="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs font-semibold"
+                      >
+                        {translateReferenceName(sk)}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </CardContent>
             </Card>
