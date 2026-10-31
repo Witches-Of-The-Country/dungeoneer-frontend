@@ -28,7 +28,7 @@ export default function EncyclopediaLayout({
         <div className="container max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button asChild variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
-              <Link href="/dashboard">
+              <Link href="/characters">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Dashboard</span>
               </Link>
