@@ -146,4 +146,65 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     fireEvent.click(screen.getByTestId('ability-slot-charisma'));
     expect(nextButton).not.toBeDisabled();
   });
+
+  it('Bug 1: blocks HP rolling in Step 1 when level > 1 and method is ROLLED until class is selected', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation(
+      async (endpoint: string, options?: apiClient.ApiRequestOptions) => {
+        if (endpoint.startsWith('/api/reference/lineages')) {
+          return [
+            {
+              id: 'lin-1',
+              name: 'Humano',
+              description: 'Versátil.',
+              speed: 30,
+              size: 'MEDIUM',
+              abilityBonuses: {},
+              traitsSummary: [],
+              ruleset: 'SRD_2024',
+            },
+          ];
+        }
+        if (endpoint.startsWith('/api/reference/classes')) {
+          return [
+            {
+              id: 'cls-fighter-1',
+              name: 'Guerreiro',
+              hitDice: 'd10',
+              primaryAbility: 'STRENGTH',
+              savingThrowProficiencies: ['STRENGTH', 'CONSTITUTION'],
+              spellcastingType: 'NONE',
+              ruleset: 'SRD_2024',
+            },
+          ];
+        }
+        if (endpoint.startsWith('/api/reference/backgrounds')) {
+          return [];
+        }
+        if (endpoint === '/api/characters/hp-rolls' && options?.method === 'POST') {
+          return {
+            rollId: 'hp-roll-001',
+            rolledHpPerLevel: [8, 7],
+          };
+        }
+        return undefined;
+      }
+    );
+
+    renderWithQuery(<CharacterCreationWizardPage />);
+
+    // In Step 1, set level to 3
+    fireEvent.change(screen.getByLabelText(/Nível \(1 a 20\)/i), {
+      target: { value: '3' },
+    });
+
+    // Select ROLLED HP calculation method
+    fireEvent.click(screen.getByRole('button', { name: /Rolar Dados/i }));
+
+    // Verify HP roll button is disabled and warning message is present
+    const hpRollButton = screen.getByTestId('hp-roll-button');
+    expect(hpRollButton).toBeDisabled();
+
+    const warning = screen.getByTestId('hp-roll-warning');
+    expect(warning).toHaveTextContent(/Selecione uma classe primeiro/i);
+  });
 });

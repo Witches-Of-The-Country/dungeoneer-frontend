@@ -124,8 +124,10 @@ function DraggableScoreChip({
       data-testid={`score-chip-${item.id}`}
       {...listeners}
       {...attributes}
-      className={`px-4 py-2.5 rounded-lg font-mono text-lg font-bold border transition-all cursor-grab active:cursor-grabbing select-none ${
-        isDragging ? "opacity-50 scale-105 z-50" : ""
+      className={`px-4 py-2.5 rounded-lg font-mono text-lg font-bold border select-none ${
+        isDragging
+          ? "opacity-50 scale-105 z-50 cursor-grabbing"
+          : "transition-all duration-150 cursor-grab"
       } ${
         isSelected
           ? "bg-amber-500 text-slate-950 border-amber-300 ring-2 ring-amber-400 shadow-lg"
@@ -320,14 +322,13 @@ export default function CharacterCreationWizardPage() {
   } | null>(null);
 
   const handleRollHp = async () => {
-    const archId = selectedClassId || classes[0]?.id;
-    if (!archId) {
-      toast.error("Selecione uma classe para rolar os Pontos de Vida.");
+    if (!selectedClassId) {
+      toast.error("Selecione uma classe primeiro.");
       return;
     }
     try {
       const res = await hpRollMutation.mutateAsync({
-        archetypeId: archId,
+        archetypeId: selectedClassId,
         level: watchedLevel,
       });
       setHpRollData({
@@ -930,25 +931,38 @@ export default function CharacterCreationWizardPage() {
                       </div>
 
                       {watchedHpMethod === "ROLLED" && (
-                        <div className="pt-2 flex items-center gap-3">
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={
-                              Boolean(hpRollData) || hpRollMutation.isPending
-                            }
-                            onClick={handleRollHp}
-                            className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold"
-                          >
-                            <Dices className="w-4 h-4 mr-1.5" />
-                            {hpRollData
-                              ? "Dados de Vida Rolados"
-                              : "Rolar Dados de Vida"}
-                          </Button>
-                          {hpRollData && (
-                            <span className="text-xs font-mono text-amber-300">
-                              Rolagens: [{hpRollData.rolledHpPerLevel.join(", ")}]
-                            </span>
+                        <div className="pt-2 flex flex-col gap-1.5">
+                          <div className="flex items-center gap-3">
+                            <Button
+                              type="button"
+                              size="sm"
+                              data-testid="hp-roll-button"
+                              disabled={
+                                !selectedClassId ||
+                                Boolean(hpRollData) ||
+                                hpRollMutation.isPending
+                              }
+                              onClick={handleRollHp}
+                              className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Dices className="w-4 h-4 mr-1.5" />
+                              {hpRollData
+                                ? "Dados de Vida Rolados"
+                                : "Rolar Dados de Vida"}
+                            </Button>
+                            {hpRollData && (
+                              <span className="text-xs font-mono text-amber-300">
+                                Rolagens: [{hpRollData.rolledHpPerLevel.join(", ")}]
+                              </span>
+                            )}
+                          </div>
+                          {!selectedClassId && (
+                            <p
+                              data-testid="hp-roll-warning"
+                              className="text-xs text-amber-400/90 flex items-center gap-1"
+                            >
+                              Selecione uma classe primeiro
+                            </p>
                           )}
                         </div>
                       )}
