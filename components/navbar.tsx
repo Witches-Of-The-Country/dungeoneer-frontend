@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,12 +19,14 @@ import {
   User as UserIcon,
   Sparkles,
   ScrollText,
+  BookOpen,
+  Crown,
 } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/lib/hooks/use-auth";
 
 export function Navbar() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, isDM, logout } = useAuth();
   const router = useRouter();
 
   const handleLogout = () => {
@@ -33,12 +36,17 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md shadow-sm">
-      <div className="container mx-auto py-4 md:py-6 px-4 flex justify-between items-center">
+      <div className="container mx-auto py-2 md:py-2.5 px-4 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Link href="/">
-            <span className="text-xl md:text-2xl font-serif font-bold text-primary">
-              Dungeoneer 🐉
-            </span>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/logo.png"
+              alt="Dungeoneer"
+              width={370}
+              height={120}
+              className="h-14 sm:h-16 md:h-20 w-auto object-contain"
+              priority
+            />
           </Link>
         </div>
 
@@ -71,14 +79,27 @@ export function Navbar() {
                   >
                     <UserIcon className="w-4 h-4 text-primary" />
                     <span>{user.nickname || user.email}</span>
+                    {isDM && (
+                      <span className="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <Crown className="w-3 h-3" />
+                        Mestre
+                      </span>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {user.nickname}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium leading-none">
+                          {user.nickname}
+                        </p>
+                        {isDM && (
+                          <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
+                            Mestre
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs leading-none text-muted-foreground">
                         {user.email}
                       </p>
@@ -147,8 +168,13 @@ export function Navbar() {
               {!isLoading && isAuthenticated && user ? (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    Conectado como {user.nickname || user.email}
+                  <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center justify-between">
+                    <span>{user.nickname || user.email}</span>
+                    {isDM && (
+                      <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
+                        Mestre
+                      </span>
+                    )}
                   </DropdownMenuLabel>
                   <DropdownMenuItem asChild>
                     <Link
