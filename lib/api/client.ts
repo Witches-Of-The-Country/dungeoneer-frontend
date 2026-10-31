@@ -196,6 +196,11 @@ export async function apiFetch<T = unknown>(
           window.localStorage.removeItem('dungeoneer_token');
           window.localStorage.removeItem(AUTH_USER_KEY);
           window.localStorage.removeItem('dungeoneer_user');
+          document.cookie = `${AUTH_TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+          document.cookie = `dungeoneer_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+          document.cookie = `${AUTH_USER_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+          document.cookie = `dungeoneer_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+          window.dispatchEvent(new Event('auth-state-change'));
         } catch {
           // ignore storage errors
         }

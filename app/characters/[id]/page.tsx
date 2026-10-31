@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -37,6 +38,7 @@ import {
   useCharacter,
   useUpdateCharacter,
   useDeleteCharacter,
+  useCharacterNotes,
   ABILITY_KEYS,
   ABILITY_LABELS,
   DND_SKILLS,
@@ -45,6 +47,8 @@ import {
   normalizeAbilityKey,
 } from "@/lib/api/characters";
 import { DeleteCharacterModal } from "@/components/delete-character-modal";
+import { NoteCard } from "@/components/note-card";
+import { AddNoteForm } from "@/components/add-note-form";
 
 type SheetTab =
   | "Resumo"
@@ -82,10 +86,12 @@ export default function CharacterSheetPage() {
   const deleteMutation = useDeleteCharacter();
 
   const [activeTab, setActiveTab] = useState<SheetTab>("Resumo");
-  const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [damageAmount, setDamageAmount] = useState("");
+  const [healAmount, setHealAmount] = useState("");
 
-  const effectiveNotes = notesDraft ?? character?.notes ?? "";
+  const { data: notes = [], isLoading: loadingNotes } =
+    useCharacterNotes(characterId);
 
   if (isLoading) {
     return (
@@ -147,22 +153,22 @@ export default function CharacterSheetPage() {
     }
   };
 
-  const handleSaveNotes = async () => {
-    try {
-      await updateMutation.mutateAsync({
-        id: character.id,
-        payload: {
-          name: character.name,
-          hitPointsCurrent: character.hitPointsCurrent,
-          hitPointsTemp: character.hitPointsTemp,
-          notes: effectiveNotes,
-        },
-      });
-      toast.success("Notas do personagem salvas com sucesso!");
-    } catch {
-      // handled by apiFetch
+  const handleApplyDamage = () => {
+    const amount = parseInt(damageAmount, 10);
+    if (!isNaN(amount) && amount > 0) {
+      handleAdjustHp(-amount);
+      setDamageAmount("");
     }
   };
+
+  const handleApplyHeal = () => {
+    const amount = parseInt(healAmount, 10);
+    if (!isNaN(amount) && amount > 0) {
+      handleAdjustHp(amount);
+      setHealAmount("");
+    }
+  };
+
 
   const handleConfirmDelete = async () => {
     try {
@@ -339,6 +345,74 @@ export default function CharacterSheetPage() {
                   <Plus className="w-4 h-4 mr-1" />
                   +1 PV
                 </Button>
+              </div>
+
+              {/* Linha 2: Controles Numéricos com Auto-Reset */}
+              <div className="flex items-center gap-2 pt-1">
+                {/* Lado esquerdo: Dano */}
+                <div className="flex items-center gap-1.5 flex-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    aria-label="Aplicar Dano"
+                    disabled={
+                      updateMutation.isPending || character.hitPointsCurrent <= 0
+                    }
+                    onClick={handleApplyDamage}
+                    className="h-8 px-2.5 border-red-900/50 bg-slate-950 hover:bg-red-950/40 text-red-400"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </Button>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Dano"
+                    value={damageAmount}
+                    onChange={(e) => setDamageAmount(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleApplyDamage();
+                      }
+                    }}
+                    aria-label="Valor de dano"
+                    className="h-8 text-xs bg-slate-950 border-red-900/40 text-red-200 placeholder:text-slate-500 font-mono"
+                  />
+                </div>
+
+                {/* Lado direito: Cura */}
+                <div className="flex items-center gap-1.5 flex-1">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Cura"
+                    value={healAmount}
+                    onChange={(e) => setHealAmount(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleApplyHeal();
+                      }
+                    }}
+                    aria-label="Valor de cura"
+                    className="h-8 text-xs bg-slate-950 border-emerald-900/40 text-emerald-200 placeholder:text-slate-500 font-mono"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    aria-label="Aplicar Cura"
+                    disabled={
+                      updateMutation.isPending ||
+                      character.hitPointsCurrent >= character.hitPointsMax
+                    }
+                    onClick={handleApplyHeal}
+                    className="h-8 px-2.5 border-emerald-900/50 bg-slate-950 hover:bg-emerald-950/40 text-emerald-400"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -565,38 +639,42 @@ export default function CharacterSheetPage() {
 
       {/* TAB 4: NOTAS */}
       {activeTab === "Notas" && (
-        <Card className="bg-slate-900/85 border border-amber-900/40 shadow-xl">
-          <CardHeader>
-            <CardTitle className="text-xl font-serif text-amber-200">
-              Notas &amp; História do Personagem
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Registre antecedentes, traços de personalidade, aliados e anotações
-              de sessão.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <textarea
-              aria-label="Notas do personagem"
-              rows={8}
-              value={effectiveNotes}
-              onChange={(e) => setNotesDraft(e.target.value)}
-              placeholder="Escreva a crônica do seu herói..."
-              className="w-full rounded-xl bg-slate-950 border border-amber-900/50 p-4 text-sm text-amber-50 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
-            />
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                onClick={handleSaveNotes}
-                disabled={updateMutation.isPending}
-                className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {updateMutation.isPending ? "Salvando..." : "Salvar Notas"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card className="bg-slate-900/85 border border-amber-900/40 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-xl font-serif text-amber-200">
+                Notas &amp; História do Personagem
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                Registre antecedentes, traços de personalidade, crônicas e anotações
+                de sessão de forma incremental.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <AddNoteForm characterId={character.id} />
+
+          <div className="space-y-4">
+            <h3 className="text-lg font-serif font-bold text-amber-300">
+              Anotações Registradas
+            </h3>
+            {loadingNotes ? (
+              <div className="p-8 text-center text-sm text-amber-200/70 font-serif">
+                Consultando pergaminhos...
+              </div>
+            ) : notes.length === 0 ? (
+              <div className="p-8 rounded-xl bg-slate-900/60 border border-amber-900/30 text-center text-sm text-slate-400">
+                Nenhuma anotação registrada ainda para este aventureiro.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {notes.map((note) => (
+                  <NoteCard key={note.id} note={note} characterId={character.id} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* PLACEHOLDER TABS: AÇÕES, MAGIAS, INVENTÁRIO, TALENTOS */}

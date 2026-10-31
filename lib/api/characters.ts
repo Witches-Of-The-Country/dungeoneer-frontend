@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './client';
+import { translateReferenceName } from '@/lib/srd-translations';
 
 export type Ruleset = 'SRD_2014' | 'SRD_2024';
 export type AbilityScoreMethod = 'STANDARD_ARRAY' | 'POINT_BUY' | 'ROLLED';
@@ -90,6 +91,12 @@ export interface ClassProgression {
   classLevel: number;
 }
 
+export interface ClassProgressionPayload {
+  archetypeId: string;
+  subclassId?: string | null;
+  classLevel: number;
+}
+
 export interface CharacterResponse {
   id: string;
   userId?: string;
@@ -112,6 +119,7 @@ export interface CharacterResponse {
   background: ReferenceBackground;
   archetype: ReferenceClass;
   classProgressions?: ClassProgression[];
+  skillProficiencies?: string[];
   savingThrows?: Record<string, number>;
   skills?: Record<string, number>;
   createdAt?: string;
@@ -133,6 +141,8 @@ export interface CreateCharacterPayload {
   hpCalculationMethod?: HpCalculationMethod;
   hpRollId?: string | null;
   notes?: string;
+  classProgressions?: ClassProgressionPayload[];
+  skillProficiencies?: string[];
 }
 
 export interface UpdateCharacterPayload {
@@ -166,12 +176,107 @@ export interface HpRollResponse {
   createdAt?: string;
 }
 
+export interface CharacterNote {
+  id: string;
+  characterId: string;
+  title: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateCharacterNotePayload {
+  title: string;
+  body: string;
+}
+
+export interface UpdateCharacterNotePayload {
+  title: string;
+  body: string;
+}
+
 export async function getCharacters(): Promise<CharacterSummary[]> {
-  return apiFetch<CharacterSummary[]>('/api/characters');
+  const characters = await apiFetch<CharacterSummary[]>('/api/characters');
+  return characters.map((c) => ({
+    ...c,
+    className: translateReferenceName(c.className),
+    lineageName: translateReferenceName(c.lineageName),
+    backgroundName: c.backgroundName
+      ? translateReferenceName(c.backgroundName)
+      : c.backgroundName,
+  }));
 }
 
 export async function getCharacter(id: string): Promise<CharacterResponse> {
-  return apiFetch<CharacterResponse>(`/api/characters/${id}`);
+  const character = await apiFetch<CharacterResponse>(`/api/characters/${id}`);
+  return {
+    ...character,
+    archetype: character.archetype
+      ? {
+          ...character.archetype,
+          name: translateReferenceName(character.archetype.name),
+          armorProficiencies: (character.archetype.armorProficiencies ?? []).map(translateReferenceName),
+          weaponProficiencies: (character.archetype.weaponProficiencies ?? []).map(translateReferenceName),
+        }
+      : character.archetype,
+    lineage: character.lineage
+      ? {
+          ...character.lineage,
+          name: translateReferenceName(character.lineage.name),
+          description: translateReferenceName(character.lineage.description),
+          traitsSummary: (character.lineage.traitsSummary ?? []).map(translateReferenceName),
+        }
+      : character.lineage,
+    background: character.background
+      ? {
+          ...character.background,
+          name: translateReferenceName(character.background.name),
+          description: translateReferenceName(character.background.description),
+          originFeatName: character.background.originFeatName
+            ? translateReferenceName(character.background.originFeatName)
+            : character.background.originFeatName,
+          originFeatDescription: character.background.originFeatDescription
+            ? translateReferenceName(character.background.originFeatDescription)
+            : character.background.originFeatDescription,
+          skillProficiencies: (
+            character.background.skillProficiencies ?? []
+          ).map(translateReferenceName),
+        }
+      : character.background,
+  };
+}
+
+export async function getCharacterNotes(
+  characterId: string
+): Promise<CharacterNote[]> {
+  return apiFetch<CharacterNote[]>(`/api/characters/${characterId}/notes`);
+}
+
+export async function addCharacterNote({
+  characterId,
+  payload,
+}: {
+  characterId: string;
+  payload: CreateCharacterNotePayload;
+}): Promise<CharacterNote> {
+  return apiFetch<CharacterNote>(`/api/characters/${characterId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCharacterNote({
+  characterId,
+  noteId,
+  payload,
+}: {
+  characterId: string;
+  noteId: string;
+  payload: UpdateCharacterNotePayload;
+}): Promise<CharacterNote> {
+  return apiFetch<CharacterNote>(`/api/characters/${characterId}/notes/${noteId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function createCharacter(
@@ -220,23 +325,49 @@ export async function rollHitPoints(
 export async function getReferenceClasses(
   ruleset: Ruleset
 ): Promise<ReferenceClass[]> {
-  return apiFetch<ReferenceClass[]>(`/api/reference/classes?ruleset=${ruleset}`);
+  const classes = await apiFetch<ReferenceClass[]>(
+    `/api/reference/classes?ruleset=${ruleset}`
+  );
+  return classes.map((c) => ({
+    ...c,
+    name: translateReferenceName(c.name),
+    armorProficiencies: (c.armorProficiencies ?? []).map(translateReferenceName),
+    weaponProficiencies: (c.weaponProficiencies ?? []).map(translateReferenceName),
+  }));
 }
 
 export async function getReferenceLineages(
   ruleset: Ruleset
 ): Promise<ReferenceLineage[]> {
-  return apiFetch<ReferenceLineage[]>(
+  const lineages = await apiFetch<ReferenceLineage[]>(
     `/api/reference/lineages?ruleset=${ruleset}`
   );
+  return lineages.map((l) => ({
+    ...l,
+    name: translateReferenceName(l.name),
+    description: translateReferenceName(l.description),
+    traitsSummary: (l.traitsSummary ?? []).map(translateReferenceName),
+  }));
 }
 
 export async function getReferenceBackgrounds(
   ruleset: Ruleset
 ): Promise<ReferenceBackground[]> {
-  return apiFetch<ReferenceBackground[]>(
+  const backgrounds = await apiFetch<ReferenceBackground[]>(
     `/api/reference/backgrounds?ruleset=${ruleset}`
   );
+  return backgrounds.map((b) => ({
+    ...b,
+    name: translateReferenceName(b.name),
+    description: translateReferenceName(b.description),
+    originFeatName: b.originFeatName
+      ? translateReferenceName(b.originFeatName)
+      : b.originFeatName,
+    originFeatDescription: b.originFeatDescription
+      ? translateReferenceName(b.originFeatDescription)
+      : b.originFeatDescription,
+    skillProficiencies: (b.skillProficiencies ?? []).map(translateReferenceName),
+  }));
 }
 
 // TanStack Query Hooks
@@ -292,6 +423,46 @@ export function useDeleteCharacter() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['characters'] });
       queryClient.removeQueries({ queryKey: ['characters', id] });
+    },
+  });
+}
+
+export function useCharacterNotes(characterId: string) {
+  return useQuery({
+    queryKey: ['characters', characterId, 'notes'],
+    queryFn: () => getCharacterNotes(characterId),
+    enabled: Boolean(characterId),
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useAddCharacterNote(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateCharacterNotePayload) =>
+      addCharacterNote({ characterId, payload }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['characters', characterId, 'notes'],
+      });
+    },
+  });
+}
+
+export function useUpdateCharacterNote(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      noteId,
+      payload,
+    }: {
+      noteId: string;
+      payload: UpdateCharacterNotePayload;
+    }) => updateCharacterNote({ characterId, noteId, payload }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['characters', characterId, 'notes'],
+      });
     },
   });
 }

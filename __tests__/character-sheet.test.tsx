@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CharacterSheetPage from '@/app/characters/[id]/page';
 import * as apiClient from '@/lib/api/client';
-import type { CharacterResponse } from '@/lib/api/characters';
+import type { CharacterResponse, CharacterNote } from '@/lib/api/characters';
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'char-101' }),
@@ -89,6 +89,17 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
   });
 
   it('renders all 8 tabs, displays live data in Resumo, Atributos, Perícias, and Notas, and shows Em breve in placeholder tabs', async () => {
+    const initialNotes: CharacterNote[] = [
+      {
+        id: 'note-1',
+        characterId: 'char-101',
+        title: 'Origem Élfica',
+        body: 'Arqueiro élfico da Floresta das Trevas.',
+        createdAt: '2026-10-30T10:00:00Z',
+      },
+    ];
+    let currentNotes = [...initialNotes];
+
     const apiFetchSpy = vi
       .spyOn(apiClient, 'apiFetch')
       .mockImplementation(async (endpoint: string, options?: apiClient.ApiRequestOptions) => {
@@ -96,10 +107,23 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
           return mockCharacter;
         }
         if (endpoint === '/api/characters/char-101' && options?.method === 'PUT') {
-          return {
-            ...mockCharacter,
-            notes: 'Nova anotação da campanha.',
+          const body = JSON.parse(String(options.body));
+          return { ...mockCharacter, ...body };
+        }
+        if (endpoint === '/api/characters/char-101/notes' && (!options?.method || options.method === 'GET')) {
+          return currentNotes;
+        }
+        if (endpoint === '/api/characters/char-101/notes' && options?.method === 'POST') {
+          const body = JSON.parse(String(options.body));
+          const created: CharacterNote = {
+            id: 'note-2',
+            characterId: 'char-101',
+            title: body.title,
+            body: body.body,
+            createdAt: '2026-10-30T11:00:00Z',
           };
+          currentNotes = [created, ...currentNotes];
+          return created;
         }
         return undefined;
       });
@@ -131,6 +155,46 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
     expect(screen.getByTestId('sheet-ac')).toHaveTextContent('16');
     expect(screen.getByTestId('sheet-initiative')).toHaveTextContent('+4');
 
+    // Quick HP controls: Linha 1 (-1 PV, +1 PV)
+    const minusOneBtn = screen.getByRole('button', { name: /Reduzir PV/i });
+    const plusOneBtn = screen.getByRole('button', { name: /Aumentar PV/i });
+    expect(minusOneBtn).toBeInTheDocument();
+    expect(plusOneBtn).toBeInTheDocument();
+
+    // Numeric HP controls: Linha 2 (Dano & Cura with auto-reset)
+    const damageInput = screen.getByPlaceholderText('Dano');
+    const applyDamageBtn = screen.getByRole('button', { name: /Aplicar Dano/i });
+    fireEvent.change(damageInput, { target: { value: '5' } });
+    fireEvent.click(applyDamageBtn);
+
+    await waitFor(() => {
+      expect(apiFetchSpy).toHaveBeenCalledWith(
+        '/api/characters/char-101',
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"hitPointsCurrent":19'),
+        })
+      );
+    });
+    // Auto-reset verified
+    expect(damageInput).toHaveValue(null);
+
+    const healInput = screen.getByPlaceholderText('Cura');
+    fireEvent.change(healInput, { target: { value: '3' } });
+    fireEvent.keyDown(healInput, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => {
+      expect(apiFetchSpy).toHaveBeenCalledWith(
+        '/api/characters/char-101',
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"hitPointsCurrent":27'),
+        })
+      );
+    });
+    // Auto-reset verified
+    expect(healInput).toHaveValue(null);
+
     // Tab 2: Atributos
     fireEvent.click(screen.getByRole('tab', { name: 'Atributos' }));
     expect(
@@ -149,21 +213,31 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
     const skillRows = screen.getAllByTestId(/^skill-row-/);
     expect(skillRows).toHaveLength(18);
 
-    // Tab 4: Notas (editing and saving)
+    // Tab 4: Notas (incremental notes list & add note)
     fireEvent.click(screen.getByRole('tab', { name: 'Notas' }));
-    const notesTextarea = screen.getByLabelText(/Notas do personagem/i);
-    expect(notesTextarea).toHaveValue('Arqueiro élfico da Floresta das Trevas.');
-    fireEvent.change(notesTextarea, {
-      target: { value: 'Nova anotação da campanha.' },
+    expect(await screen.findByText('Origem Élfica')).toBeInTheDocument();
+    expect(
+      screen.getByText('Arqueiro élfico da Floresta das Trevas.')
+    ).toBeInTheDocument();
+
+    // Add a new incremental note via AddNoteForm
+    fireEvent.change(screen.getByLabelText(/Título da Nota/i), {
+      target: { value: 'Nova anotação da campanha' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Salvar Notas/i }));
+    fireEvent.change(screen.getByLabelText(/Conteúdo/i), {
+      target: { value: 'Encontramos rastros no rio.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar Nota/i }));
 
     await waitFor(() => {
       expect(apiFetchSpy).toHaveBeenCalledWith(
-        '/api/characters/char-101',
-        expect.objectContaining({ method: 'PUT' })
+        '/api/characters/char-101/notes',
+        expect.objectContaining({ method: 'POST' })
       );
     });
+
+    expect(await screen.findByText('Nova anotação da campanha')).toBeInTheDocument();
+    expect(screen.getByText('Encontramos rastros no rio.')).toBeInTheDocument();
 
     // Placeholder Tabs: Ações, Magias, Inventário, Talentos
     for (const placeholderTab of ['Ações', 'Magias', 'Inventário', 'Talentos']) {

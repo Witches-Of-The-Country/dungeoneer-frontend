@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { UserProfile, getStoredToken, getStoredUser, clearAuth } from "@/lib/api/auth";
+import { apiFetch } from "@/lib/api/client";
 
 export function useAuth() {
   const [user, setUser] = useState<UserProfile | null>(() => getStoredUser());
@@ -22,6 +23,35 @@ export function useAuth() {
     return () => {
       window.removeEventListener("auth-state-change", handleAuthChange);
       window.removeEventListener("storage", handleAuthChange);
+    };
+  }, [syncAuth]);
+
+  // Session guard: verify session integrity against backend on mount
+  useEffect(() => {
+    const currentToken = getStoredToken();
+    if (!currentToken) return;
+
+    let isMounted = true;
+    setIsLoading(true);
+
+    apiFetch("/api/characters", {
+      method: "GET",
+      suppressErrorToast: true,
+    })
+      .catch((err: any) => {
+        if (isMounted && (err?.status === 401 || err?.status === 404)) {
+          clearAuth();
+          syncAuth();
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
     };
   }, [syncAuth]);
 
