@@ -119,7 +119,7 @@ export async function fetchLineagesPaginated(filters: CommonFilters = {}): Promi
 }
 
 export function useInfiniteSpells(filters: Omit<SpellFilters, 'cursor'>) {
-  return useInfiniteQuery<CursorPageResponse<Spell>, Error, InfiniteData<CursorPageResponse<Spell>>, [string, typeof filters], string | null>({
+  return useInfiniteQuery<CursorPageResponse<Spell>, Error, InfiniteData<CursorPageResponse<Spell>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'spells', filters],
     queryFn: ({ pageParam }) => fetchSpells({ ...filters, cursor: pageParam }),
     initialPageParam: null,
@@ -128,7 +128,7 @@ export function useInfiniteSpells(filters: Omit<SpellFilters, 'cursor'>) {
 }
 
 export function useInfiniteFeats(filters: Omit<CommonFilters, 'cursor'>) {
-  return useInfiniteQuery<CursorPageResponse<Feat>, Error, InfiniteData<CursorPageResponse<Feat>>, [string, typeof filters], string | null>({
+  return useInfiniteQuery<CursorPageResponse<Feat>, Error, InfiniteData<CursorPageResponse<Feat>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'feats', filters],
     queryFn: ({ pageParam }) => fetchFeats({ ...filters, cursor: pageParam }),
     initialPageParam: null,
@@ -137,7 +137,7 @@ export function useInfiniteFeats(filters: Omit<CommonFilters, 'cursor'>) {
 }
 
 export function useInfiniteItems(filters: Omit<ItemFilters, 'cursor'>) {
-  return useInfiniteQuery<CursorPageResponse<Item>, Error, InfiniteData<CursorPageResponse<Item>>, [string, typeof filters], string | null>({
+  return useInfiniteQuery<CursorPageResponse<Item>, Error, InfiniteData<CursorPageResponse<Item>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'items', filters],
     queryFn: ({ pageParam }) => fetchItems({ ...filters, cursor: pageParam }),
     initialPageParam: null,
@@ -146,7 +146,7 @@ export function useInfiniteItems(filters: Omit<ItemFilters, 'cursor'>) {
 }
 
 export function useInfiniteClasses(filters: Omit<CommonFilters, 'cursor'>) {
-  return useInfiniteQuery<CursorPageResponse<ArchetypeSummary>, Error, InfiniteData<CursorPageResponse<ArchetypeSummary>>, [string, typeof filters], string | null>({
+  return useInfiniteQuery<CursorPageResponse<ArchetypeSummary>, Error, InfiniteData<CursorPageResponse<ArchetypeSummary>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'classes', filters],
     queryFn: ({ pageParam }) => fetchClassesPaginated({ ...filters, cursor: pageParam }),
     initialPageParam: null,
@@ -155,7 +155,7 @@ export function useInfiniteClasses(filters: Omit<CommonFilters, 'cursor'>) {
 }
 
 export function useInfiniteLineages(filters: Omit<CommonFilters, 'cursor'>) {
-  return useInfiniteQuery<CursorPageResponse<LineageSummary>, Error, InfiniteData<CursorPageResponse<LineageSummary>>, [string, typeof filters], string | null>({
+  return useInfiniteQuery<CursorPageResponse<LineageSummary>, Error, InfiniteData<CursorPageResponse<LineageSummary>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'lineages', filters],
     queryFn: ({ pageParam }) => fetchLineagesPaginated({ ...filters, cursor: pageParam }),
     initialPageParam: null,
