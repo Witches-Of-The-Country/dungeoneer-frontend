@@ -128,12 +128,37 @@ export function useCreateHomebrewClass() {
   });
 }
 
+export interface CreateHomebrewSubclassPayload {
+  archetypeId: string;
+  name: string;
+  nameEn?: string;
+  description: string;
+}
+
+export async function createHomebrewSubclass(payload: CreateHomebrewSubclassPayload): Promise<any> {
+  return apiFetch<any>('/api/reference/subclasses', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function useCreateHomebrewLineage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createHomebrewLineage,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encyclopedia', 'lineages'] });
+    },
+  });
+}
+
+export function useCreateHomebrewSubclass() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createHomebrewSubclass,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['encyclopedia', 'subclasses'] });
+      queryClient.invalidateQueries({ queryKey: ['encyclopedia', 'classes'] });
     },
   });
 }
