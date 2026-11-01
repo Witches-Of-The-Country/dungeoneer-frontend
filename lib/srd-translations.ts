@@ -3,6 +3,27 @@
  * Mapeia identificadores, nomes em inglês e slugs para suas respectivas traduções canônicas de D&D 5e / 2024.
  */
 
+export const ABILITY_NAMES_PT: Record<string, string> = {
+  STRENGTH: "Força",
+  Strength: "Força",
+  STR: "Força",
+  DEXTERITY: "Destreza",
+  Dexterity: "Destreza",
+  DEX: "Destreza",
+  CONSTITUTION: "Constituição",
+  Constitution: "Constituição",
+  CON: "Constituição",
+  INTELLIGENCE: "Inteligência",
+  Intelligence: "Inteligência",
+  INT: "Inteligência",
+  WISDOM: "Sabedoria",
+  Wisdom: "Sabedoria",
+  WIS: "Sabedoria",
+  CHARISMA: "Carisma",
+  Charisma: "Carisma",
+  CHA: "Carisma",
+};
+
 export const CLASS_NAMES_PT: Record<string, string> = {
   Barbarian: "Bárbaro",
   Bard: "Bardo",
@@ -422,6 +443,7 @@ export function translateSrd(key: string | null | undefined, dictionary: Record<
 export function translateReferenceName(name: string | null | undefined): string {
   if (!name) return "";
   return (
+    ABILITY_NAMES_PT[name] ||
     CLASS_NAMES_PT[name] ||
     RACE_NAMES_PT[name] ||
     BACKGROUND_NAMES_PT[name] ||

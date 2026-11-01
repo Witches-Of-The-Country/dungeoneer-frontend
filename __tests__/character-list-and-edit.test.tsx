@@ -188,7 +188,6 @@ describe('TP-03: Character List, Delete Confirmation Modal & Edit Page', () => {
       name: 'Capitão Boromir',
       hitPointsCurrent: 35,
       hitPointsTemp: 0,
-      notes: 'Portador da Trombeta de Gondor.',
     });
 
     expect(mockPush).toHaveBeenCalledWith('/characters/char-202');

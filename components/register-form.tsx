@@ -71,11 +71,20 @@ export function RegisterForm() {
     setLoading(true);
 
     try {
+      const roles: string[] = [];
+      if (values.modules.includes("player")) {
+        roles.push("PLAYER");
+      }
+      if (values.modules.includes("dm")) {
+        roles.push("DUNGEON_MASTER");
+      }
+
       await register({
         email: values.email,
         nickname: values.nick,
         birthdate: values.birthdate,
         password: values.password,
+        roles: roles.length > 0 ? roles : ["PLAYER"],
       });
       toast.success("Cadastro realizado com sucesso! Bem-vindo à Guilda.");
       router.push("/characters");

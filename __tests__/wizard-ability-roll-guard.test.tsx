@@ -281,6 +281,12 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     fireEvent.change(primaryLvlInput, { target: { value: '2' } });
     expect(levelsBadge).toHaveTextContent('Soma: 3 / 3');
 
+    // Trigger HP roll for secondary class (Mago)
+    const secHpRollButton = screen.getByTestId('hp-roll-secondary-cls-wizard-2');
+    expect(secHpRollButton).not.toBeDisabled();
+    fireEvent.click(secHpRollButton);
+    expect(await screen.findByText(/\[4, 5\]/i)).toBeInTheDocument();
+
     // Advancing now succeeds into Step 4
     fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
     await screen.findByText(/Passo 4 — Antecedente/i);

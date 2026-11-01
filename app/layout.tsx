@@ -22,6 +22,9 @@ const fontMono = Fira_Code({
 export const metadata: Metadata = {
   title: "Dungeoneer - Gerenciador de Campanhas e Fichas de D&D",
   description: "Gerencie suas campanhas, NPCs e fichas de personagens de Dungeons & Dragons com facilidade.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 import { ThemeProvider } from "@/components/theme-provider";

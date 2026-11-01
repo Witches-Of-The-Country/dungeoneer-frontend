@@ -25,6 +25,7 @@ export interface RegisterPayload {
   nickname: string;
   birthdate: string;
   password: string;
+  roles?: string[];
 }
 
 function setCookie(name: string, value: string, days = 7) {
@@ -36,6 +37,31 @@ function setCookie(name: string, value: string, days = 7) {
 function deleteCookie(name: string) {
   if (typeof document === 'undefined') return;
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
+}
+
+export function isTokenExpired(token: string | null): boolean {
+  if (!token) return true;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (payload.exp && payload.exp * 1000 <= Date.now()) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 export function getCookie(name: string): string | null {
@@ -92,18 +118,25 @@ export async function registerUser(payload: RegisterPayload): Promise<AuthRespon
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return (
+  const token =
     window.localStorage.getItem(AUTH_TOKEN_KEY) ||
     window.localStorage.getItem('dungeoneer_token') ||
     getCookie(AUTH_TOKEN_KEY) ||
-    getCookie('dungeoneer_token')
-  );
+    getCookie('dungeoneer_token');
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    logout();
+    return null;
+  }
+  return token;
 }
 
 export const getStoredToken = getToken;
 
 export function getUser(): UserProfile | null {
   if (typeof window === 'undefined') return null;
+  const token = getToken();
+  if (!token) return null;
   const userStr =
     window.localStorage.getItem(AUTH_USER_KEY) ||
     window.localStorage.getItem('dungeoneer_user') ||
@@ -118,6 +151,14 @@ export function getUser(): UserProfile | null {
 }
 
 export const getStoredUser = getUser;
+
+export async function selfPromoteToDm(): Promise<AuthResponse> {
+  const response = await apiFetch<AuthResponse>('/api/auth/me/roles/promote-dm', {
+    method: 'POST',
+  });
+  persistAuthSession(response);
+  return response;
+}
 
 export function logout(): void {
   if (typeof window !== 'undefined') {

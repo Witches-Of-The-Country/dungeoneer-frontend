@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Award, Loader2 } from 'lucide-react';
+import { Award, Loader2, Plus } from 'lucide-react';
 import { useInfiniteFeats, type Feat } from '@/lib/api/encyclopedia';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { CreateHomebrewDialog } from '@/components/homebrew/create-homebrew-dialog';
 import { SearchBar } from '@/components/encyclopedia/search-bar';
 import { ReferenceCard } from '@/components/encyclopedia/reference-card';
 import { ReferenceCardSkeleton } from '@/components/encyclopedia/reference-card-skeleton';
@@ -13,9 +15,12 @@ const RULESETS = [
   { value: 'ALL', label: 'Todos os Conjuntos' },
   { value: 'SRD_2014', label: 'SRD 2014 (5.1)' },
   { value: 'SRD_2024', label: 'SRD 2024 (5.2)' },
+  { value: 'HOMEBREW', label: 'Homebrew' },
 ];
 
 export default function FeatsPage() {
+  const { isDM } = useAuth();
+  const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [ruleset, setRuleset] = useState('ALL');
 
@@ -51,10 +56,27 @@ export default function FeatsPage() {
             Talentos de Personagem
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Consulte talentos gerais e de origem do SRD 2014 e 2024.
+            Consulte talentos gerais e de origem do SRD 2014, 2024 e Homebrew.
           </p>
         </div>
+
+        {isDM && (
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold shadow-sm font-serif tracking-wide flex items-center gap-2 self-start sm:self-auto"
+            data-testid="create-homebrew-button"
+          >
+            <Plus className="w-4 h-4" />
+            Criar novo
+          </Button>
+        )}
       </div>
+
+      <CreateHomebrewDialog
+        open={createOpen}
+        category="feats"
+        onClose={() => setCreateOpen(false)}
+      />
 
       <div className="space-y-3 bg-card/60 p-4 rounded-xl border border-border/60">
         <div className="flex flex-col sm:flex-row gap-3">

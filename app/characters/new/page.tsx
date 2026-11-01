@@ -84,6 +84,15 @@ const WIZARD_STEPS = [
 const STANDARD_ARRAY_VALUES = [15, 14, 13, 12, 10, 8];
 const ROLL_STORAGE_KEY = "dungeoneer_wizard_ability_roll";
 
+function formatAbilityName(raw: string | undefined | null): string {
+  if (!raw) return "";
+  const key = normalizeAbilityKey(raw);
+  if (key && ABILITY_LABELS[key]) {
+    return ABILITY_LABELS[key].full;
+  }
+  return translateReferenceName(raw) || raw;
+}
+
 export const wizardStep1Schema = z.object({
   name: z
     .string()
@@ -406,27 +415,45 @@ export default function CharacterCreationWizardPage() {
     ? hpRollsByClass[selectedClassId] ?? null
     : null;
 
-  const handleRollHp = async () => {
-    if (!selectedClassId) {
-      toast.error("Selecione uma classe primeiro.");
-      return;
-    }
+  const handleRollHpForClass = async (
+    archetypeId: string,
+    level: number,
+    isSecondaryClass: boolean,
+    className: string
+  ) => {
     try {
       const res = await hpRollMutation.mutateAsync({
-        archetypeId: selectedClassId,
-        level: characterLevel,
+        archetypeId,
+        level,
+        isSecondaryClass,
       });
       setHpRollsByClass((prev) => ({
         ...prev,
-        [selectedClassId]: {
+        [archetypeId]: {
           rollId: res.rollId,
           rolledHpPerLevel: res.rolledHpPerLevel,
         },
       }));
-      toast.success("Pontos de Vida rolados no servidor!");
+      toast.success(`Dados de Vida rolados para ${className}!`);
     } catch {
       // handled by apiFetch
     }
+  };
+
+  const handleRollHp = async () => {
+    if (!selectedClassId || !selectedClass) {
+      toast.error("Selecione uma classe primeiro.");
+      return;
+    }
+    const isMulticlass = secondaryClasses.length > 0;
+    const rollsCount = isMulticlass ? primaryClassLevel : characterLevel;
+    if (rollsCount <= 1) return;
+    await handleRollHpForClass(
+      selectedClassId,
+      rollsCount,
+      false,
+      selectedClass.name
+    );
   };
 
   // Class Skills Selection
@@ -818,17 +845,51 @@ export default function CharacterCreationWizardPage() {
 
     let maxHp = hitDieFaces + conMod;
     if (characterLevel > 1) {
-      if (hpMethod === "MAX") {
-        maxHp += (characterLevel - 1) * (hitDieFaces + conMod);
-      } else if (hpMethod === "ROLLED" && activeClassHpRoll?.rolledHpPerLevel) {
-        const sumRolls = activeClassHpRoll.rolledHpPerLevel.reduce(
-          (a, b) => a + b,
-          0
-        );
-        maxHp += sumRolls + (characterLevel - 1) * conMod;
+      if (secondaryClasses.length > 0) {
+        // Multiclass calculation
+        const primaryExtraLevels = primaryClassLevel - 1;
+        if (primaryExtraLevels > 0) {
+          if (hpMethod === "MAX") {
+            maxHp += primaryExtraLevels * (hitDieFaces + conMod);
+          } else if (hpMethod === "ROLLED") {
+            const rolls = hpRollsByClass[selectedClassId]?.rolledHpPerLevel ?? [];
+            const sumRolls = rolls.reduce((a, b) => a + b, 0);
+            maxHp += sumRolls + primaryExtraLevels * conMod;
+          } else {
+            const avgPerLevel = Math.floor(hitDieFaces / 2) + 1;
+            maxHp += primaryExtraLevels * (avgPerLevel + conMod);
+          }
+        }
+        for (const sec of secondaryClasses) {
+          const secClass = classes.find((c) => c.id === sec.classId);
+          const secFaces = Number(
+            (secClass?.hitDice ?? "d8").replace(/\D/g, "") || 8
+          );
+          if (hpMethod === "MAX") {
+            maxHp += sec.classLevel * (secFaces + conMod);
+          } else if (hpMethod === "ROLLED") {
+            const rolls = hpRollsByClass[sec.classId]?.rolledHpPerLevel ?? [];
+            const sumRolls = rolls.reduce((a, b) => a + b, 0);
+            maxHp += sumRolls + sec.classLevel * conMod;
+          } else {
+            const avgPerLevel = Math.floor(secFaces / 2) + 1;
+            maxHp += sec.classLevel * (avgPerLevel + conMod);
+          }
+        }
       } else {
-        const avgPerLevel = Math.floor(hitDieFaces / 2) + 1;
-        maxHp += (characterLevel - 1) * (avgPerLevel + conMod);
+        // Mono-class
+        if (hpMethod === "MAX") {
+          maxHp += (characterLevel - 1) * (hitDieFaces + conMod);
+        } else if (hpMethod === "ROLLED" && activeClassHpRoll?.rolledHpPerLevel) {
+          const sumRolls = activeClassHpRoll.rolledHpPerLevel.reduce(
+            (a, b) => a + b,
+            0
+          );
+          maxHp += sumRolls + (characterLevel - 1) * conMod;
+        } else {
+          const avgPerLevel = Math.floor(hitDieFaces / 2) + 1;
+          maxHp += (characterLevel - 1) * (avgPerLevel + conMod);
+        }
       }
     }
 
@@ -846,6 +907,11 @@ export default function CharacterCreationWizardPage() {
     characterLevel,
     hpMethod,
     activeClassHpRoll,
+    secondaryClasses,
+    primaryClassLevel,
+    hpRollsByClass,
+    selectedClassId,
+    classes,
   ]);
 
   // Navigation Handlers
@@ -865,11 +931,33 @@ export default function CharacterCreationWizardPage() {
         );
         return;
       }
-      if (characterLevel > 1 && hpMethod === "ROLLED" && !activeClassHpRoll) {
-        toast.error(
-          "Role os dados de vida para a classe selecionada antes de avançar."
-        );
-        return;
+      if (characterLevel > 1 && hpMethod === "ROLLED") {
+        if (secondaryClasses.length === 0) {
+          if (!activeClassHpRoll) {
+            toast.error(
+              "Role os dados de vida para a classe selecionada antes de avançar."
+            );
+            return;
+          }
+        } else {
+          if (primaryClassLevel > 1 && !hpRollsByClass[selectedClassId]) {
+            toast.error(
+              `Role os dados de vida da classe principal (${selectedClass?.name}) antes de avançar.`
+            );
+            return;
+          }
+          for (const sec of secondaryClasses) {
+            if (!hpRollsByClass[sec.classId]) {
+              const secName =
+                classes.find((c) => c.id === sec.classId)?.name ||
+                "secundária";
+              toast.error(
+                `Role os dados de vida da classe ${secName} antes de avançar.`
+              );
+              return;
+            }
+          }
+        }
       }
     }
     if (currentStep === 5 && !isStep5Valid) {
@@ -935,7 +1023,11 @@ export default function CharacterCreationWizardPage() {
         hpCalculationMethod: characterLevel > 1 ? hpMethod : "MAX",
         hpRollId:
           characterLevel > 1 && hpMethod === "ROLLED"
-            ? activeClassHpRoll?.rollId
+            ? (activeClassHpRoll?.rollId || Object.values(hpRollsByClass)[0]?.rollId)
+            : undefined,
+        hpRollIds:
+          characterLevel > 1 && hpMethod === "ROLLED"
+            ? Object.values(hpRollsByClass).map((r) => r.rollId)
             : undefined,
         classProgressions:
           classProgressionsPayload.length > 0
@@ -1197,7 +1289,7 @@ export default function CharacterCreationWizardPage() {
                           <div className="font-serif font-bold">{cls.name}</div>
                           <div className="text-xs text-slate-400">
                             Dado de Vida: {cls.hitDice.toUpperCase()} •{" "}
-                            {cls.primaryAbility}
+                            {formatAbilityName(cls.primaryAbility)}
                           </div>
                         </button>
                       ))}
@@ -1213,7 +1305,7 @@ export default function CharacterCreationWizardPage() {
                                 {selectedClass.name}
                               </h3>
                               <p className="text-xs text-slate-400">
-                                Atributo Principal: {selectedClass.primaryAbility}
+                                Atributo Principal: {formatAbilityName(selectedClass.primaryAbility)}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1238,7 +1330,7 @@ export default function CharacterCreationWizardPage() {
                                   key={st}
                                   className="px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 font-semibold"
                                 >
-                                  {st}
+                                  {formatAbilityName(st)}
                                 </span>
                               ))}
                             </div>
@@ -1296,31 +1388,132 @@ export default function CharacterCreationWizardPage() {
                             </div>
 
                             {hpMethod === "ROLLED" && (
-                              <div className="pt-2 flex flex-col gap-1.5">
-                                <div className="flex items-center gap-3">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    data-testid="hp-roll-button"
-                                    disabled={
-                                      !selectedClassId ||
-                                      Boolean(activeClassHpRoll) ||
-                                      hpRollMutation.isPending
-                                    }
-                                    onClick={handleRollHp}
-                                    className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    <Dices className="w-4 h-4 mr-1.5" />
-                                    {activeClassHpRoll
-                                      ? "Dados de Vida Rolados"
-                                      : `Rolar Dados de Vida (${selectedClass?.name})`}
-                                  </Button>
-                                  {activeClassHpRoll && (
-                                    <span className="text-xs font-mono text-amber-300">
-                                      Rolagens: [{activeClassHpRoll.rolledHpPerLevel.join(", ")}]
-                                    </span>
-                                  )}
-                                </div>
+                              <div className="pt-2 flex flex-col gap-3">
+                                {secondaryClasses.length === 0 ? (
+                                  // Mono-class HP rolling
+                                  <div className="flex items-center gap-3">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      data-testid="hp-roll-button"
+                                      disabled={
+                                        !selectedClassId ||
+                                        Boolean(activeClassHpRoll) ||
+                                        hpRollMutation.isPending
+                                      }
+                                      onClick={handleRollHp}
+                                      className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <Dices className="w-4 h-4 mr-1.5" />
+                                      {activeClassHpRoll
+                                        ? "Dados de Vida Rolados"
+                                        : `Rolar Dados de Vida (${selectedClass?.name}) — ${characterLevel - 1}d${(selectedClass?.hitDice ?? "d8").replace(/\D/g, "")}`}
+                                    </Button>
+                                    {activeClassHpRoll && (
+                                      <span className="text-xs font-mono text-amber-300">
+                                        Rolagens: [{activeClassHpRoll.rolledHpPerLevel.join(", ")}]
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  // Multiclass HP rolling per class
+                                  <div className="space-y-2.5 p-3 rounded-lg bg-slate-900/60 border border-amber-900/30">
+                                    <p className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
+                                      Rolagem de PV por Classe (Multiclasse)
+                                    </p>
+                                    {/* Primary class */}
+                                    <div className="flex items-center justify-between gap-3 p-2 rounded bg-slate-950/80 border border-slate-800">
+                                      <div>
+                                        <span className="text-xs font-serif font-bold text-amber-100">
+                                          {selectedClass?.name} (Classe Principal, Nível {primaryClassLevel})
+                                        </span>
+                                      </div>
+                                      {primaryClassLevel > 1 ? (
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            data-testid="hp-roll-button"
+                                            disabled={
+                                              Boolean(hpRollsByClass[selectedClassId]) ||
+                                              hpRollMutation.isPending
+                                            }
+                                            onClick={() =>
+                                              handleRollHpForClass(
+                                                selectedClassId,
+                                                primaryClassLevel,
+                                                false,
+                                                selectedClass?.name ?? "Principal"
+                                              )
+                                            }
+                                            className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-semibold"
+                                          >
+                                            <Dices className="w-3.5 h-3.5 mr-1" />
+                                            {hpRollsByClass[selectedClassId]
+                                              ? "Rolado"
+                                              : `Rolar ${primaryClassLevel - 1}d${(selectedClass?.hitDice ?? "d8").replace(/\D/g, "")}`}
+                                          </Button>
+                                          {hpRollsByClass[selectedClassId] && (
+                                            <span className="text-xs font-mono text-amber-300">
+                                              [{hpRollsByClass[selectedClassId].rolledHpPerLevel.join(", ")}]
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-amber-400 font-mono">
+                                          1º nível máximo (sem rolagem)
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Secondary classes */}
+                                    {secondaryClasses.map((sec, sIdx) => {
+                                      const secClass = classes.find((c) => c.id === sec.classId);
+                                      const secRoll = hpRollsByClass[sec.classId];
+                                      const secDieFaces = (secClass?.hitDice ?? "d8").replace(/\D/g, "");
+                                      return (
+                                        <div
+                                          key={sIdx}
+                                          className="flex items-center justify-between gap-3 p-2 rounded bg-slate-950/80 border border-slate-800"
+                                        >
+                                          <span className="text-xs font-serif font-bold text-amber-100">
+                                            {secClass?.name ?? "Secundária"} (Nível {sec.classLevel})
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              data-testid={`hp-roll-secondary-${sec.classId}`}
+                                              disabled={
+                                                Boolean(secRoll) ||
+                                                hpRollMutation.isPending
+                                              }
+                                              onClick={() =>
+                                                handleRollHpForClass(
+                                                  sec.classId,
+                                                  sec.classLevel,
+                                                  true,
+                                                  secClass?.name ?? "Secundária"
+                                                )
+                                              }
+                                              className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-semibold"
+                                            >
+                                              <Dices className="w-3.5 h-3.5 mr-1" />
+                                              {secRoll
+                                                ? "Rolado"
+                                                : `Rolar ${sec.classLevel}d${secDieFaces}`}
+                                            </Button>
+                                            {secRoll && (
+                                              <span className="text-xs font-mono text-amber-300">
+                                                [{secRoll.rolledHpPerLevel.join(", ")}]
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                                 {!selectedClassId && (
                                   <p
                                     data-testid="hp-roll-warning"

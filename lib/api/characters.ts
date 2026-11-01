@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './client';
 import { translateReferenceName } from '@/lib/srd-translations';
 
-export type Ruleset = 'SRD_2014' | 'SRD_2024';
+export type Ruleset = 'SRD_2014' | 'SRD_2024' | 'HOMEBREW';
 export type AbilityScoreMethod = 'STANDARD_ARRAY' | 'POINT_BUY' | 'ROLLED';
 export type HpCalculationMethod = 'MAX' | 'AVERAGE' | 'ROLLED';
 
@@ -140,6 +140,7 @@ export interface CreateCharacterPayload {
   abilityRollId?: string | null;
   hpCalculationMethod?: HpCalculationMethod;
   hpRollId?: string | null;
+  hpRollIds?: string[];
   notes?: string;
   classProgressions?: ClassProgressionPayload[];
   skillProficiencies?: string[];
@@ -164,6 +165,7 @@ export interface AbilityRollResponse {
 export interface HpRollPayload {
   archetypeId: string;
   level: number;
+  isSecondaryClass?: boolean;
 }
 
 export interface HpRollResponse {

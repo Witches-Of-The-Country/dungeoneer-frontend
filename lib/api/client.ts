@@ -103,12 +103,20 @@ function translateCommonBackendDetail(detail: string, status: number): string {
   return detail;
 }
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {
     return (
       window.localStorage.getItem(AUTH_TOKEN_KEY) ||
-      window.localStorage.getItem('dungeoneer_token')
+      window.localStorage.getItem('dungeoneer_token') ||
+      getCookie(AUTH_TOKEN_KEY) ||
+      getCookie('dungeoneer_token')
     );
   } catch {
     return null;

@@ -43,7 +43,6 @@ export const editCharacterSchema = z.object({
     .number()
     .int()
     .min(0, "Os PV temporários não podem ser negativos."),
-  notes: z.string().optional(),
 });
 
 export type EditCharacterFormValues = z.infer<typeof editCharacterSchema>;
@@ -65,7 +64,6 @@ export default function EditCharacterPage() {
       name: "",
       hitPointsCurrent: 1,
       hitPointsTemp: 0,
-      notes: "",
     },
   });
 
@@ -75,7 +73,6 @@ export default function EditCharacterPage() {
         name: character.name,
         hitPointsCurrent: character.hitPointsCurrent,
         hitPointsTemp: character.hitPointsTemp ?? 0,
-        notes: character.notes ?? "",
       });
     }
   }, [character, form]);
@@ -118,7 +115,6 @@ export default function EditCharacterPage() {
           name: values.name.trim(),
           hitPointsCurrent: values.hitPointsCurrent,
           hitPointsTemp: values.hitPointsTemp,
-          notes: values.notes ?? "",
         },
       });
       toast.success("Alterações salvas com sucesso!");
@@ -209,8 +205,7 @@ export default function EditCharacterPage() {
             Editar Personagem
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Atualize o nome, os Pontos de Vida atuais/temporários e as anotações
-            da ficha.
+            Atualize o nome e os Pontos de Vida atuais/temporários da ficha.
           </CardDescription>
         </CardHeader>
 
@@ -269,18 +264,6 @@ export default function EditCharacterPage() {
                   </p>
                 )}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-notes" className="text-amber-100">
-                Notas do Personagem
-              </Label>
-              <textarea
-                id="edit-notes"
-                rows={6}
-                {...form.register("notes")}
-                className="w-full rounded-xl bg-slate-950 border border-amber-900/50 p-3.5 text-sm text-amber-50 focus:outline-none focus:border-amber-500"
-              />
             </div>
           </CardContent>
 

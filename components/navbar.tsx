@@ -106,7 +106,15 @@ export function Navbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
+                                    <DropdownMenuItem asChild>
+                    <Link
+                      href="/profile"
+                      className="w-full cursor-pointer flex items-center gap-2"
+                    >
+                      <UserIcon className="w-4 h-4 text-primary" /> Meu Perfil
+                    </Link>
+                  </DropdownMenuItem>
+<DropdownMenuItem asChild>
                     <Link
                       href="/characters"
                       className="w-full cursor-pointer flex items-center gap-2"
@@ -176,7 +184,15 @@ export function Navbar() {
                       </span>
                     )}
                   </DropdownMenuLabel>
-                  <DropdownMenuItem asChild>
+                                    <DropdownMenuItem asChild>
+                    <Link
+                      href="/profile"
+                      className="w-full cursor-pointer flex items-center gap-2"
+                    >
+                      <UserIcon className="w-4 h-4 text-primary" /> Meu Perfil
+                    </Link>
+                  </DropdownMenuItem>
+<DropdownMenuItem asChild>
                     <Link
                       href="/characters"
                       className="w-full cursor-pointer flex items-center gap-2"
