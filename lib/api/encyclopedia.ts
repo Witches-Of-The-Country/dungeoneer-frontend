@@ -154,6 +154,27 @@ export function useInfiniteClasses(filters: Omit<CommonFilters, 'cursor'>) {
   });
 }
 
+export interface Subclass {
+  id: string;
+  archetypeId: string;
+  ruleset: string;
+  slug: string;
+  nameEn: string;
+  name: string;
+  description: string;
+  source: string;
+}
+
+export async function fetchSubclasses(archetypeId: string, ruleset?: string): Promise<Subclass[]> {
+  const params = new URLSearchParams({ archetypeId });
+  if (ruleset) params.append('ruleset', ruleset);
+  return apiFetch<Subclass[]>(`/api/reference/subclasses?${params.toString()}`);
+}
+
+export async function fetchProgressionFeats(archetypeId: string, level: number): Promise<Feat[]> {
+  return apiFetch<Feat[]>(`/api/reference/progression-feats?archetypeId=${archetypeId}&level=${level}`);
+}
+
 export function useInfiniteLineages(filters: Omit<CommonFilters, 'cursor'>) {
   return useInfiniteQuery<CursorPageResponse<LineageSummary>, Error, InfiniteData<CursorPageResponse<LineageSummary>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'lineages', filters],

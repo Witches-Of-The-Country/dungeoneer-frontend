@@ -97,6 +97,51 @@ export interface ClassProgressionPayload {
   classLevel: number;
 }
 
+export interface CharacterItem {
+  id: string;
+  characterId: string;
+  itemId: string;
+  itemName: string;
+  itemCategory: string;
+  itemType: string;
+  rarity: string;
+  attunement: boolean;
+  cost?: string;
+  weight?: string;
+  description?: string;
+  quantity: number;
+  equipped: boolean;
+  attuned: boolean;
+  mechanicalProperties?: any;
+}
+
+export interface CharacterFeat {
+  id: string;
+  characterId: string;
+  featId: string;
+  name: string;
+  description: string;
+  featType: string;
+  unlockedAtLevel: number;
+  currentCharges?: number | null;
+  maxCharges?: number | null;
+  source: string;
+  mechanicalEffects?: any;
+}
+
+export interface CharacterAction {
+  id: string;
+  name: string;
+  actionType: 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE' | string;
+  sourceType: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | string;
+  attackBonus?: number | null;
+  damageRolls?: Array<{ diceCount: number; diceType: number; damageType: string; bonusModifier?: number }>;
+  versatileDice?: string | null;
+  description?: string | null;
+  usesRemaining?: number | null;
+  maxUses?: number | null;
+}
+
 export interface CharacterResponse {
   id: string;
   userId?: string;
@@ -122,6 +167,11 @@ export interface CharacterResponse {
   skillProficiencies?: string[];
   savingThrows?: Record<string, number>;
   skills?: Record<string, number>;
+  experiencePoints?: number;
+  campaignId?: string | null;
+  inventory?: CharacterItem[];
+  feats?: CharacterFeat[];
+  actions?: CharacterAction[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -587,6 +637,154 @@ export function calculatePointBuyTotal(
     const val = scores[key] ?? 8;
     return acc + (POINT_BUY_COSTS[val] ?? 0);
   }, 0);
+}
+
+export interface DndSkillDefinition {
+  id: string;
+  enName: string;
+  ptName: string;
+  ability: AbilityKey;
+}
+
+export const DND_XP_THRESHOLDS = [
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+  85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000
+];
+
+export function getXpProgress(totalXp: number, currentLevel: number): { current: number; max: number; percentage: number; canLevelUp: boolean } {
+  if (currentLevel >= 20) {
+    return { current: totalXp, max: DND_XP_THRESHOLDS[19], percentage: 100, canLevelUp: false };
+  }
+  const currentFloor = DND_XP_THRESHOLDS[currentLevel - 1];
+  const nextTarget = DND_XP_THRESHOLDS[currentLevel];
+  const progressInLevel = Math.max(0, totalXp - currentFloor);
+  const totalLevelSpan = nextTarget - currentFloor;
+  const percentage = Math.min(100, Math.floor((progressInLevel / totalLevelSpan) * 100));
+  return {
+    current: totalXp,
+    max: nextTarget,
+    percentage,
+    canLevelUp: totalXp >= nextTarget,
+  };
+}
+
+export interface AddExperiencePayload {
+  amount: number;
+}
+
+export interface LevelUpPayload {
+  archetypeId: string;
+  subclassId?: string | null;
+  hpCalculationMethod: HpCalculationMethod;
+  hpRollId?: string | null;
+  hpIncrease: number;
+  milestone?: boolean;
+  abilityScoreIncreases?: Record<string, number>;
+  selectedFeatId?: string | null;
+}
+
+export interface RestPayload {
+  restType: 'SHORT' | 'LONG';
+  hpHealed?: number;
+}
+
+export interface AddCharacterItemPayload {
+  itemId: string;
+  quantity: number;
+}
+
+export interface UpdateCharacterItemPayload {
+  equipped?: boolean;
+  attuned?: boolean;
+  quantity?: number;
+}
+
+export function useAddExperience(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AddExperiencePayload) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/xp`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
+  });
+}
+
+export function useLevelUp(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: LevelUpPayload) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/level-up`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
+  });
+}
+
+export function useRest(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RestPayload) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/rest`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
+  });
+}
+
+export function useManageInventory(characterId: string) {
+  const queryClient = useQueryClient();
+  return {
+    addItem: useMutation({
+      mutationFn: (payload: AddCharacterItemPayload) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/items`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
+      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+    }),
+    updateItem: useMutation({
+      mutationFn: ({ itemId, payload }: { itemId: string; payload: UpdateCharacterItemPayload }) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/items/${itemId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        }),
+      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+    }),
+    removeItem: useMutation({
+      mutationFn: (itemId: string) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/items/${itemId}`, {
+          method: 'DELETE',
+        }),
+      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+    }),
+    useConsumable: useMutation({
+      mutationFn: (itemId: string) =>
+        apiFetch<any>(`/api/characters/${characterId}/items/${itemId}/use`, {
+          method: 'POST',
+        }),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['character', characterId] }),
+    }),
+    useFeat: useMutation({
+      mutationFn: (featId: string) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/feats/${featId}/use`, {
+          method: 'POST',
+        }),
+      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+    }),
+  };
 }
 
 export interface DndSkillDefinition {
