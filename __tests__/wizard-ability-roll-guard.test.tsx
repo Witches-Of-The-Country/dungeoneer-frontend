@@ -61,6 +61,7 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
               primaryAbility: 'INTELLIGENCE',
               savingThrowProficiencies: ['INTELLIGENCE', 'WISDOM'],
               spellcastingType: 'FULL',
+              subclassLevel: 3,
               ruleset: 'SRD_2024',
             },
           ];
@@ -76,6 +77,23 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
               ruleset: 'SRD_2024',
             },
           ];
+        }
+        if (endpoint.startsWith('/api/reference/feats')) {
+          return {
+            items: [
+              {
+                id: 'feat-magic-initiate',
+                name: 'Iniciado em Magia',
+                nameEn: 'Magic Initiate',
+                featType: 'ORIGIN',
+                description: 'Aprende truques e magia de 1º círculo.',
+                ruleset: 'SRD_2024',
+              },
+            ],
+            nextCursor: null,
+            hasNext: false,
+            pageSize: 1,
+          };
         }
         if (endpoint === '/api/characters/ability-rolls' && options?.method === 'POST') {
           rollCallCount += 1;
@@ -108,7 +126,6 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     fireEvent.click(screen.getByText(/Rolagem \(4d6kh3\)/i));
 
     const nextButton = screen.getByRole('button', { name: /Próximo/i });
-    // Before rolling or assigning, Next button must be disabled
     expect(nextButton).toBeDisabled();
 
     const rollButton = screen.getByRole('button', { name: /Rolar Atributos/i });
@@ -122,7 +139,6 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
 
     await screen.findByTestId('score-chip-roll-0');
 
-    // After rolling once, the button is permanently disabled and cannot trigger a second roll
     const lockedRollButton = screen.getByRole('button', {
       name: /Atributos Rolados/i,
     });
@@ -130,7 +146,6 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     fireEvent.click(lockedRollButton);
     expect(rollCallCount).toBe(1);
 
-    // Assign only 5 of 6 slots — Next button must still remain disabled
     for (const ability of [
       'strength',
       'dexterity',
@@ -142,14 +157,13 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     }
     expect(nextButton).toBeDisabled();
 
-    // Assign the 6th slot — Next button becomes enabled
     fireEvent.click(screen.getByTestId('ability-slot-charisma'));
     expect(nextButton).not.toBeDisabled();
   });
 
-  it('Step 3: manages Initial Level, HP rolling with per-class cache, multiclass distribution, and class skills selection', async () => {
+  it('Step 3 & Step 4: configures Target Level > 1 guided progression notice, career HP method lock, Level 1 Subclass (when subclassLevel === 1), Origin Feat, and skill collision detection', async () => {
     vi.spyOn(apiClient, 'apiFetch').mockImplementation(
-      async (endpoint: string, options?: apiClient.ApiRequestOptions) => {
+      async (endpoint: string) => {
         if (endpoint.startsWith('/api/reference/lineages')) {
           return [
             {
@@ -173,16 +187,31 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
               primaryAbility: 'STRENGTH',
               savingThrowProficiencies: ['STRENGTH', 'CONSTITUTION'],
               spellcastingType: 'NONE',
+              subclassLevel: 3,
               ruleset: 'SRD_2024',
             },
             {
-              id: 'cls-wizard-2',
-              name: 'Mago',
-              hitDice: 'd6',
-              primaryAbility: 'INTELLIGENCE',
-              savingThrowProficiencies: ['INTELLIGENCE', 'WISDOM'],
+              id: 'cls-cleric-1',
+              name: 'Clérigo',
+              hitDice: 'd8',
+              primaryAbility: 'WISDOM',
+              savingThrowProficiencies: ['WISDOM', 'CHARISMA'],
               spellcastingType: 'FULL',
-              ruleset: 'SRD_2024',
+              subclassLevel: 1,
+              ruleset: 'SRD_2014',
+            },
+          ];
+        }
+        if (endpoint.startsWith('/api/reference/subclasses')) {
+          return [
+            {
+              id: 'sub-life-1',
+              archetypeId: 'cls-cleric-1',
+              name: 'Domínio da Vida',
+              nameEn: 'Life Domain',
+              description: 'Cura divina.',
+              ruleset: 'SRD_2014',
+              source: 'SRD',
             },
           ];
         }
@@ -199,17 +228,21 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
             },
           ];
         }
-        if (endpoint === '/api/characters/hp-rolls' && options?.method === 'POST') {
-          const body = JSON.parse(String(options.body));
-          if (body.archetypeId === 'cls-fighter-1') {
-            return {
-              rollId: 'hp-roll-fighter',
-              rolledHpPerLevel: [8, 7],
-            };
-          }
+        if (endpoint.startsWith('/api/reference/feats')) {
           return {
-            rollId: 'hp-roll-wizard',
-            rolledHpPerLevel: [4, 5],
+            items: [
+              {
+                id: 'feat-savage-attacker',
+                name: 'Atacante Selvagem',
+                nameEn: 'Savage Attacker',
+                featType: 'ORIGIN',
+                description: 'Rerola dados de dano de arma uma vez por turno.',
+                ruleset: 'SRD_2024',
+              },
+            ],
+            nextCursor: null,
+            hasNext: false,
+            pageSize: 1,
           };
         }
         return undefined;
@@ -218,7 +251,7 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
 
     renderWithQuery(<CharacterCreationWizardPage />);
 
-    // In Step 1, enter name and proceed
+    // Step 1
     fireEvent.change(screen.getByLabelText(/Nome do Personagem/i), {
       target: { value: 'Conan' },
     });
@@ -227,71 +260,39 @@ describe('TE-01: Wizard Single-Chance Roll Guard & Slot Validation', () => {
     fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
     await screen.findByText(/Passo 3 — Classe/i);
 
-    // In Step 3: Set level to 3
-    const levelInput = screen.getByLabelText(/Nível Inicial/i);
-    fireEvent.change(levelInput, { target: { value: '3' } });
+    // Career HP method is visible even at Level 1!
+    expect(screen.getByTestId('hp-method-AVERAGE')).toBeInTheDocument();
+    expect(screen.getByTestId('hp-method-ROLLED')).toBeInTheDocument();
+    expect(screen.getByTestId('hp-method-MAX')).toBeInTheDocument();
 
-    // Select Guerreiro class
+    // Select Clérigo (subclassLevel === 1) -> Level 1 Subclass select appears!
+    fireEvent.click(await screen.findByRole('button', { name: /Clérigo/i }));
+    expect(await screen.findByTestId('level-1-subclass-select')).toBeInTheDocument();
+
+    // Switch back to Guerreiro (subclassLevel === 3) -> Level 1 Subclass select hides!
     fireEvent.click(await screen.findByRole('button', { name: /Guerreiro/i }));
+    expect(screen.queryByTestId('level-1-subclass-select')).not.toBeInTheDocument();
 
-    // Select ROLLED HP calculation method
-    fireEvent.click(screen.getByRole('button', { name: 'Rolado' }));
+    // Set Target Level to 5 -> Guided Level-by-Level Progression notice appears with 6.500 XP
+    const levelInput = screen.getByLabelText(/Nível Alvo do Personagem/i);
+    fireEvent.change(levelInput, { target: { value: '5' } });
+    expect(await screen.findByTestId('higher-level-creation-notice')).toBeInTheDocument();
 
-    // Trigger HP roll for Guerreiro
-    const hpRollButton = screen.getByTestId('hp-roll-button');
-    expect(hpRollButton).not.toBeDisabled();
-    fireEvent.click(hpRollButton);
-    expect(await screen.findByText(/Rolagens: \[8, 7\]/i)).toBeInTheDocument();
+    // Select ROLLED career HP method
+    fireEvent.click(screen.getByTestId('hp-method-ROLLED'));
 
-    // Switch class to Mago: Guerreiro roll is preserved in cache, Mago needs roll
-    fireEvent.click(await screen.findByRole('button', { name: /Mago/i }));
-    expect(screen.queryByText(/Rolagens: \[8, 7\]/i)).not.toBeInTheDocument();
-
-    // Switch back to Guerreiro: Roll is restored from cache!
-    fireEvent.click(await screen.findByRole('button', { name: /Guerreiro/i }));
-    expect(await screen.findByText(/Rolagens: \[8, 7\]/i)).toBeInTheDocument();
-
-    // Test Class Skills selection
+    // Select Atletismo skill
     const skillCounter = screen.getByTestId('class-skills-counter');
     expect(skillCounter).toHaveTextContent('0 / 2 selecionada(s)');
-
-    // Select Atletismo (Athletics)
-    const athleticsBtn = screen.getByRole('button', { name: 'Atletismo' });
-    fireEvent.click(athleticsBtn);
+    fireEvent.click(screen.getByRole('button', { name: 'Atletismo' }));
     expect(skillCounter).toHaveTextContent('1 / 2 selecionada(s)');
 
-    // Test Multiclass level distribution
-    const addMulticlassBtn = screen.getByRole('button', { name: /Adicionar Classe Secundária/i });
-    fireEvent.click(addMulticlassBtn);
-
-    // Initial multiclass allocation: primary = 2, secondary = 1 (sum = 3)
-    const levelsBadge = screen.getByTestId('multiclass-levels-badge');
-    expect(levelsBadge).toHaveTextContent('Soma: 3 / 3');
-
-    // Tamper primary level to 1 (sum becomes 2 != 3)
-    const primaryLvlInput = screen.getByLabelText(/Nível da classe principal/i);
-    fireEvent.change(primaryLvlInput, { target: { value: '1' } });
-    expect(levelsBadge).toHaveTextContent('Soma: 2 / 3');
-
-    // Attempting to advance when sum != 3 must block advancement
-    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
-    expect(screen.queryByText(/Passo 4 — Antecedente/i)).not.toBeInTheDocument();
-
-    // Restore sum to 3 (primary = 2, secondary = 1)
-    fireEvent.change(primaryLvlInput, { target: { value: '2' } });
-    expect(levelsBadge).toHaveTextContent('Soma: 3 / 3');
-
-    // Trigger HP roll for secondary class (Mago)
-    const secHpRollButton = screen.getByTestId('hp-roll-secondary-cls-wizard-2');
-    expect(secHpRollButton).not.toBeDisabled();
-    fireEvent.click(secHpRollButton);
-    expect(await screen.findByText(/\[4, 5\]/i)).toBeInTheDocument();
-
-    // Advancing now succeeds into Step 4
+    // Advance to Step 4
     fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
     await screen.findByText(/Passo 4 — Antecedente/i);
 
-    // Step 4 collision detection: 'Athletics' (Atletismo) was selected in class and also in Soldado background!
+    // Step 4 collision detection & SRD 2024 Origin Feat selector
     expect(await screen.findByText(/Colisão de Perícias Detectada/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('origin-feat-select')).toBeInTheDocument();
   });
 });

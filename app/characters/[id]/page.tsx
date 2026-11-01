@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -22,8 +22,10 @@ import {
   Backpack,
   Star,
   AlertCircle,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
+import { processAvatarImage } from "@/lib/image-upload";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +44,7 @@ import {
   ABILITY_KEYS,
   ABILITY_LABELS,
   DND_SKILLS,
+  getXpProgress,
   calculateModifier,
   formatModifier,
   normalizeAbilityKey,
@@ -95,11 +98,43 @@ export default function CharacterSheetPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAddXpModal, setShowAddXpModal] = useState(false);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [damageAmount, setDamageAmount] = useState("");
   const [healAmount, setHealAmount] = useState("");
+  const autoOpenedForCharacterRef = useRef<string | null>(null);
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !character) return;
+    setUploadingAvatar(true);
+    try {
+      const dataUrl = await processAvatarImage(file);
+      await updateMutation.mutateAsync({
+        id: character.id,
+        payload: { avatarUrl: dataUrl },
+      });
+      toast.success("Retrato do personagem atualizado!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao processar imagem.";
+      toast.error(msg);
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = "";
+    }
+  };
 
   const { data: notes = [], isLoading: loadingNotes } =
     useCharacterNotes(characterId);
+
+  useEffect(() => {
+    if (!character) return;
+    if (autoOpenedForCharacterRef.current === character.id) return;
+    const xpState = getXpProgress(character.experiencePoints || 0, character.level);
+    if ((xpState.canLevelUp || character.hasPendingLevelChoices) && character.level < 20) {
+      autoOpenedForCharacterRef.current = character.id;
+      setShowLevelUpModal(true);
+    }
+  }, [character]);
 
   if (isLoading) {
     return (
@@ -221,32 +256,69 @@ export default function CharacterSheetPage() {
       <XpProgressBar
         currentXp={character.experiencePoints || 0}
         currentLevel={character.level}
+        hasPendingLevelChoices={character.hasPendingLevelChoices}
         onOpenAddXp={() => setShowAddXpModal(true)}
         onOpenLevelUp={() => setShowLevelUpModal(true)}
       />
 
       <Card className="bg-slate-900/90 border border-amber-900/40 shadow-2xl">
         <CardContent className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-3xl font-serif font-bold text-amber-300">
-                {character.name}
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                {rulesetLabel}
-              </span>
-              {character.hasPendingLevelChoices && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-600/25 text-amber-200 border border-amber-500/50 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  Escolhas de Nível Pendentes
-                </span>
-              )}
+          <div className="flex items-center gap-4">
+            <div className="relative group shrink-0">
+              <div className="w-16 h-16 rounded-2xl bg-amber-950/40 border border-amber-800/40 flex items-center justify-center text-amber-400 overflow-hidden shadow-inner">
+                {character.avatarUrl ? (
+                  <img
+                    src={character.avatarUrl}
+                    alt={character.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Shield className="w-8 h-8 opacity-60" />
+                )}
+              </div>
+              <label
+                htmlFor="sheet-avatar-upload"
+                className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer shadow-md transition-transform active:scale-95"
+                title="Alterar Retrato"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <input
+                  id="sheet-avatar-upload"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={uploadingAvatar}
+                  onChange={handleAvatarFileChange}
+                />
+              </label>
             </div>
-            <p className="text-sm text-slate-300">
-              Nível {character.level} • {character.archetype?.name ?? "Classe"}{" "}
-              • {character.lineage?.name ?? "Linhagem"} •{" "}
-              {character.background?.name ?? "Antecedente"}
-            </p>
+
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-3xl font-serif font-bold text-amber-300">
+                  {character.name}
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {rulesetLabel}
+                </span>
+                {character.hasPendingLevelChoices && (
+                  <button
+                    type="button"
+                    data-testid="pending-level-choices-badge"
+                    onClick={() => setShowLevelUpModal(true)}
+                    className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-600/25 hover:bg-amber-500/35 text-amber-200 border border-amber-500/50 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Escolhas de Nível Pendentes — Clique para evoluir
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-slate-300">
+                Nível {character.level} • {character.archetype?.name ?? "Classe"}{" "}
+                • {character.lineage?.name ?? "Linhagem"} •{" "}
+                {character.background?.name ?? "Antecedente"}
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2.5 self-end md:self-center">

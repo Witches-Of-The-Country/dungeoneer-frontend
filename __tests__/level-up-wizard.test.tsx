@@ -1,12 +1,101 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { XpProgressBar } from '@/components/character-sheet/xp-progress-bar';
-import { getXpProgress } from '@/lib/api/characters';
+import { LevelUpWizardModal } from '@/components/character-sheet/level-up-wizard-modal';
+import { getXpProgress, CharacterResponse } from '@/lib/api/characters';
 
-describe('XP Progress Bar & Level Up UI logic', () => {
+const mockLevelUpMutate = vi.fn();
+const mockRollHpMutateAsync = vi.fn();
+
+vi.mock('@/lib/api/characters', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/characters')>();
+  return {
+    ...actual,
+    useLevelUp: () => ({
+      mutate: mockLevelUpMutate,
+      isPending: false,
+    }),
+    useRollHitPoints: () => ({
+      mutateAsync: mockRollHpMutateAsync,
+      isPending: false,
+    }),
+    useReferenceClasses: (ruleset: string) => ({
+      data:
+        ruleset === 'HOMEBREW'
+          ? []
+          : [
+              {
+                id: 'arch-fighter',
+                name: 'Guerreiro',
+                hitDice: 'd10',
+                primaryAbility: 'STRENGTH',
+                savingThrowProficiencies: ['STRENGTH', 'CONSTITUTION'],
+                spellcastingType: 'NONE',
+                subclassLevel: 3,
+                ruleset: 'SRD_2024',
+              },
+              {
+                id: 'arch-rogue',
+                name: 'Ladino',
+                hitDice: 'd8',
+                primaryAbility: 'DEXTERITY',
+                savingThrowProficiencies: ['DEXTERITY', 'INTELLIGENCE'],
+                spellcastingType: 'NONE',
+                subclassLevel: 3,
+                ruleset: 'SRD_2024',
+              },
+            ],
+    }),
+  };
+});
+
+vi.mock('@/lib/api/encyclopedia', () => ({
+  fetchSubclasses: vi.fn().mockResolvedValue([
+    {
+      id: 'sub-champion',
+      archetypeId: 'arch-fighter',
+      name: 'Campeão',
+      nameEn: 'Champion',
+      description: 'Mestre crítico marcial.',
+      ruleset: 'SRD_2024',
+      source: 'SRD',
+    },
+  ]),
+  fetchProgressionFeats: vi.fn().mockResolvedValue([]),
+  fetchSubclassProgressionFeats: vi.fn().mockResolvedValue([]),
+  fetchFeats: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: 'feat-tough',
+        name: 'Durão',
+        nameEn: 'Tough',
+        featType: 'ORIGIN',
+        prerequisites: '',
+        description: 'Seu máximo de PV aumenta em 2 por nível.',
+        ruleset: 'SRD_2024',
+        source: 'SRD',
+      },
+      {
+        id: 'feat-gwm',
+        name: 'Mestre de Armas Grandes',
+        nameEn: 'Great Weapon Master',
+        featType: 'GENERAL',
+        prerequisites: 'Nível 4+, Força 13+',
+        description: 'Golpes pesados devastadores.',
+        ruleset: 'SRD_2024',
+        source: 'SRD',
+      },
+    ],
+  }),
+}));
+
+describe('XP Progress Bar & Level Up Wizard Modal logic', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('correctly calculates XP progression and level up readiness', () => {
-    // Level 1: floor 0, target 300
     const progressLevel1 = getXpProgress(300, 1);
     expect(progressLevel1.canLevelUp).toBe(true);
     expect(progressLevel1.percentage).toBe(100);
@@ -15,13 +104,12 @@ describe('XP Progress Bar & Level Up UI logic', () => {
     expect(progressLevel1Partial.canLevelUp).toBe(false);
     expect(progressLevel1Partial.percentage).toBe(50);
 
-    // Max Level (20)
     const progressMax = getXpProgress(355000, 20);
     expect(progressMax.canLevelUp).toBe(false);
     expect(progressMax.percentage).toBe(100);
   });
 
-  it('renders XpProgressBar and displays Subir de Nível button when eligible', () => {
+  it('renders XpProgressBar and displays Subir de Nível button when eligible by XP or hasPendingLevelChoices', () => {
     const handleAddXp = vi.fn();
     const handleLevelUp = vi.fn();
 
@@ -29,6 +117,7 @@ describe('XP Progress Bar & Level Up UI logic', () => {
       <XpProgressBar
         currentXp={100}
         currentLevel={1}
+        hasPendingLevelChoices={false}
         onOpenAddXp={handleAddXp}
         onOpenLevelUp={handleLevelUp}
       />
@@ -38,11 +127,12 @@ describe('XP Progress Bar & Level Up UI logic', () => {
     expect(screen.getByText('Nível 1')).toBeInTheDocument();
     expect(screen.queryByText('Subir de Nível!')).not.toBeInTheDocument();
 
-    // Re-render with enough XP
+    // Re-render with hasPendingLevelChoices = true
     rerender(
       <XpProgressBar
-        currentXp={300}
+        currentXp={100}
         currentLevel={1}
+        hasPendingLevelChoices={true}
         onOpenAddXp={handleAddXp}
         onOpenLevelUp={handleLevelUp}
       />
@@ -53,5 +143,113 @@ describe('XP Progress Bar & Level Up UI logic', () => {
 
     fireEvent.click(levelUpBtn);
     expect(handleLevelUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows unrestricted multiclassing, locks HP method to character.hpCalculationMethod, and supports ASI vs Feat choice at ASI levels', async () => {
+    const mockChar: CharacterResponse = {
+      id: 'char-1',
+      name: 'Thorin',
+      level: 3,
+      hitPointsCurrent: 28,
+      hitPointsMax: 28,
+      hitPointsTemp: 0,
+      armorClass: 16,
+      initiativeBonus: 2,
+      speed: 30,
+      proficiencyBonus: 2,
+      ruleset: 'SRD_2024',
+      hpCalculationMethod: 'AVERAGE',
+      experiencePoints: 2700,
+      abilityScores: {
+        strength: 16,
+        dexterity: 14,
+        constitution: 14,
+        intelligence: 10,
+        wisdom: 12,
+        charisma: 8,
+      },
+      lineage: {
+        id: 'lin-1',
+        name: 'Anão',
+        description: '',
+        speed: 30,
+        size: 'MEDIUM',
+        abilityBonuses: {},
+        traitsSummary: [],
+        ruleset: 'SRD_2024',
+      },
+      background: {
+        id: 'bg-1',
+        name: 'Soldado',
+        description: '',
+        skillProficiencies: [],
+        allowedAbilityBonuses: [],
+        ruleset: 'SRD_2024',
+      },
+      archetype: {
+        id: 'arch-fighter',
+        name: 'Guerreiro',
+        hitDice: 'd10',
+        primaryAbility: 'STRENGTH',
+        savingThrowProficiencies: ['STRENGTH', 'CONSTITUTION'],
+        spellcastingType: 'NONE',
+        subclassLevel: 3,
+        ruleset: 'SRD_2024',
+      },
+      classProgressions: [
+        {
+          archetypeId: 'arch-fighter',
+          subclassId: 'sub-champion',
+          classLevel: 3,
+        },
+      ],
+    };
+
+    render(
+      <LevelUpWizardModal
+        isOpen={true}
+        onClose={vi.fn()}
+        character={mockChar}
+      />
+    );
+
+    // Step 1 shows both existing Guerreiro (Nv. 3 -> 4) and multiclass option Ladino (+ Multiclasse Nv. 1)
+    expect(screen.getByTestId('levelup-class-option-arch-fighter')).toBeInTheDocument();
+    expect(screen.getByTestId('levelup-class-option-arch-rogue')).toBeInTheDocument();
+
+    // Advance with Guerreiro (reaching Level 4, which is an ASI/Feat level)
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Step 2: HP Method is locked to AVERAGE (Média Fixa: d10 -> 6 + CON(+2) = +8 HP)
+    expect(screen.getByText(/Método de PV da Carreira/i)).toBeInTheDocument();
+    expect(screen.getByText('+8 HP')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Step 3: ASI vs Feat toggle appears for Level 4 Fighter
+    const featChoiceBtn = screen.getByTestId('choice-feat-button');
+    fireEvent.click(featChoiceBtn);
+
+    const featSelect = await screen.findByTestId('levelup-feat-select');
+    fireEvent.change(featSelect, { target: { value: 'feat-gwm' } });
+
+    // Advance to Summary (Step 4)
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Confirm Level Up
+    fireEvent.click(screen.getByTestId('levelup-confirm-button'));
+
+    await waitFor(() => {
+      expect(mockLevelUpMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          archetypeId: 'arch-fighter',
+          subclassId: null,
+          hpCalculationMethod: 'AVERAGE',
+          hpIncrease: 8,
+          selectedFeatId: 'feat-gwm',
+        }),
+        expect.anything()
+      );
+    });
   });
 });

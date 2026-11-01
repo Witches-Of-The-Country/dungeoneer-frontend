@@ -9,6 +9,7 @@ import { SearchBar } from '@/components/encyclopedia/search-bar';
 import { ReferenceCard } from '@/components/encyclopedia/reference-card';
 import { ReferenceCardSkeleton } from '@/components/encyclopedia/reference-card-skeleton';
 import { EmptySearchResults } from '@/components/encyclopedia/empty-search-results';
+import { FeatDetailModal } from '@/components/encyclopedia/feat-detail-modal';
 import { Button } from '@/components/ui/button';
 
 const RULESETS = [
@@ -18,15 +19,41 @@ const RULESETS = [
   { value: 'HOMEBREW', label: 'Homebrew' },
 ];
 
+const FEAT_TYPE_OPTIONS = [
+  { value: 'ORIGIN', label: 'Origem' },
+  { value: 'GENERAL', label: 'Geral' },
+  { value: 'CLASS', label: 'Classe' },
+  { value: 'SUBCLASS', label: 'Subclasse' },
+  { value: 'LINEAGE', label: 'Linhagem' },
+];
+
+const FEAT_TYPE_LABELS: Record<string, string> = {
+  ORIGIN: 'Origem',
+  GENERAL: 'Geral',
+  CLASS: 'Classe',
+  SUBCLASS: 'Subclasse',
+  LINEAGE: 'Linhagem',
+};
+
 export default function FeatsPage() {
   const { isDM } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedFeat, setSelectedFeat] = useState<Feat | null>(null);
+  const [editingFeat, setEditingFeat] = useState<Feat | null>(null);
   const [search, setSearch] = useState('');
   const [ruleset, setRuleset] = useState('ALL');
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+
+  const toggleFeatType = (typeVal: string) => {
+    setSelectedTypes((prev) =>
+      prev.includes(typeVal) ? prev.filter((t) => t !== typeVal) : [...prev, typeVal]
+    );
+  };
 
   const filters = {
     q: search || undefined,
     ruleset: ruleset !== 'ALL' ? ruleset : undefined,
+    featTypes: selectedTypes.length > 0 ? selectedTypes : undefined,
     limit: 20,
   };
 
@@ -45,6 +72,7 @@ export default function FeatsPage() {
   const handleResetFilters = () => {
     setSearch('');
     setRuleset('ALL');
+    setSelectedTypes([]);
   };
 
   return (
@@ -56,7 +84,7 @@ export default function FeatsPage() {
             Talentos de Personagem
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Consulte talentos gerais e de origem do SRD 2014, 2024 e Homebrew.
+            Consulte talentos gerais, de origem, classe, subclasse e linhagem do SRD 2014, 2024 e Homebrew.
           </p>
         </div>
 
@@ -73,9 +101,19 @@ export default function FeatsPage() {
       </div>
 
       <CreateHomebrewDialog
-        open={createOpen}
+        open={createOpen || !!editingFeat}
         category="feats"
-        onClose={() => setCreateOpen(false)}
+        editEntity={editingFeat}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditingFeat(null);
+        }}
+      />
+      <FeatDetailModal
+        feat={selectedFeat}
+        open={!!selectedFeat}
+        onClose={() => setSelectedFeat(null)}
+        onEdit={(f) => setEditingFeat(f)}
       />
 
       <div className="space-y-3 bg-card/60 p-4 rounded-xl border border-border/60">
@@ -98,6 +136,40 @@ export default function FeatsPage() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Multi-Select Feat Type Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40">
+          <span className="text-xs font-semibold text-muted-foreground mr-1">
+            Tipo de Talento:
+          </span>
+          {FEAT_TYPE_OPTIONS.map((opt) => {
+            const active = selectedTypes.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                data-testid={`filter-feat-type-${opt.value.toLowerCase()}`}
+                onClick={() => toggleFeatType(opt.value)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  active
+                    ? 'border-amber-500 bg-amber-500/25 text-amber-200'
+                    : 'border-border/60 bg-card text-muted-foreground hover:border-accent/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {selectedTypes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedTypes([])}
+              className="text-xs text-amber-400 hover:underline ml-2"
+            >
+              Limpar tipos
+            </button>
+          )}
         </div>
       </div>
 
@@ -122,20 +194,25 @@ export default function FeatsPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {allFeats.map((feat) => (
-              <ReferenceCard
-                key={`${feat.ruleset}-${feat.slug}`}
-                title={feat.name}
-                subtitle={feat.nameEn}
-                badge="Talento"
-                ruleset={feat.ruleset}
-                description={feat.description}
-                metaFields={[
-                  { label: 'Pré-requisitos', value: feat.prerequisites || 'Nenhum' },
-                  { label: 'Origem', value: feat.source },
-                ]}
-              />
-            ))}
+            {allFeats.map((feat) => {
+              const typeLabel = feat.featType ? (FEAT_TYPE_LABELS[feat.featType] || feat.featType) : undefined;
+              return (
+                <ReferenceCard
+                  key={`${feat.ruleset}-${feat.slug}`}
+                  title={feat.name}
+                  subtitle={feat.nameEn}
+                  badge={typeLabel ? `Talento (${typeLabel})` : 'Talento'}
+                  ruleset={feat.ruleset}
+                  onClick={() => setSelectedFeat(feat)}
+                  description={feat.description}
+                  metaFields={[
+                    { label: 'Tipo', value: typeLabel || 'Geral' },
+                    { label: 'Pré-requisitos', value: feat.prerequisites || 'Nenhum' },
+                    { label: 'Origem', value: feat.source },
+                  ]}
+                />
+              );
+            })}
           </div>
 
           {hasNextPage && (

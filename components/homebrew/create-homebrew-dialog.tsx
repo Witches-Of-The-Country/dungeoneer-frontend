@@ -18,6 +18,12 @@ import {
   useCreateHomebrewClass,
   useCreateHomebrewSubclass,
   useCreateHomebrewLineage,
+  useUpdateHomebrewSpell,
+  useUpdateHomebrewFeat,
+  useUpdateHomebrewItem,
+  useUpdateHomebrewClass,
+  useUpdateHomebrewSubclass,
+  useUpdateHomebrewLineage,
   HomebrewProgressionFeatPayload,
 } from '@/lib/api/homebrew';
 import { useReferenceClasses } from '@/lib/api/characters';
@@ -35,6 +41,7 @@ interface CreateHomebrewDialogProps {
   open: boolean;
   category: HomebrewCategory;
   onClose: () => void;
+  editEntity?: any;
 }
 
 const WEAPON_PROPERTIES = [
@@ -95,12 +102,39 @@ export function CreateHomebrewDialog({
   open,
   category,
   onClose,
+  editEntity,
 }: CreateHomebrewDialogProps) {
   const [activeCategory, setActiveCategory] = useState<HomebrewCategory>(category);
 
   useEffect(() => {
     setActiveCategory(category);
-  }, [category, open]);
+    if (editEntity) {
+      setName(editEntity.name || '');
+      setNameEn(editEntity.nameEn || '');
+      setDescription(editEntity.description || '');
+      if (editEntity.level !== undefined) setLevel(editEntity.level);
+      if (editEntity.school) setSchool(editEntity.school);
+      if (editEntity.prerequisites) setPrerequisites(editEntity.prerequisites);
+      if (editEntity.featType) setFeatType(editEntity.featType);
+      if (editEntity.category || editEntity.itemCategory) {
+        setItemCategory(editEntity.category || editEntity.itemCategory);
+      }
+      if (editEntity.rarity) setRarity(editEntity.rarity);
+      if (editEntity.attunement !== undefined) setAttunement(editEntity.attunement);
+      if (editEntity.weight !== undefined) setWeight(String(editEntity.weight || ''));
+      if (editEntity.cost !== undefined) setCost(String(editEntity.cost || ''));
+      if (editEntity.costCp !== undefined) setItemCostCp(editEntity.costCp || 0);
+      if (editEntity.costSp !== undefined) setItemCostSp(editEntity.costSp || 0);
+      if (editEntity.costEp !== undefined) setItemCostEp(editEntity.costEp || 0);
+      if (editEntity.costGp !== undefined) setItemCostGp(editEntity.costGp || 0);
+      if (editEntity.costPp !== undefined) setItemCostPp(editEntity.costPp || 0);
+      if (editEntity.speed !== undefined) setSpeed(editEntity.speed);
+      if (editEntity.size !== undefined) setSize(editEntity.size);
+      if (editEntity.hitDice) setHitDice(editEntity.hitDice);
+      if (editEntity.primaryAbility) setPrimaryAbility(editEntity.primaryAbility);
+      if (editEntity.subclassLevel) setSubclassLevel(editEntity.subclassLevel);
+    }
+  }, [category, open, editEntity]);
 
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
@@ -241,23 +275,36 @@ export function CreateHomebrewDialog({
   const subclassMutation = useCreateHomebrewSubclass();
   const lineageMutation = useCreateHomebrewLineage();
 
+  const updateSpellMutation = useUpdateHomebrewSpell();
+  const updateFeatMutation = useUpdateHomebrewFeat();
+  const updateItemMutation = useUpdateHomebrewItem();
+  const updateClassMutation = useUpdateHomebrewClass();
+  const updateSubclassMutation = useUpdateHomebrewSubclass();
+  const updateLineageMutation = useUpdateHomebrewLineage();
+
   const isPending =
     spellMutation.isPending ||
     featMutation.isPending ||
     itemMutation.isPending ||
     classMutation.isPending ||
     subclassMutation.isPending ||
-    lineageMutation.isPending;
+    lineageMutation.isPending ||
+    updateSpellMutation.isPending ||
+    updateFeatMutation.isPending ||
+    updateItemMutation.isPending ||
+    updateClassMutation.isPending ||
+    updateSubclassMutation.isPending ||
+    updateLineageMutation.isPending;
 
   if (!open) return null;
 
   const categoryTitles: Record<HomebrewCategory, string> = {
-    spells: 'Criar Nova Magia Homebrew',
-    feats: 'Criar Novo Talento Homebrew',
-    items: 'Criar Novo Item Homebrew',
-    classes: 'Criar Nova Classe Homebrew',
-    subclasses: 'Criar Nova Subclasse Homebrew',
-    lineages: 'Criar Nova Linhagem Homebrew',
+    spells: editEntity ? 'Editar Magia Homebrew' : 'Criar Nova Magia Homebrew',
+    feats: editEntity ? 'Editar Talento Homebrew' : 'Criar Novo Talento Homebrew',
+    items: editEntity ? 'Editar Item Homebrew' : 'Criar Novo Item Homebrew',
+    classes: editEntity ? 'Editar Classe Homebrew' : 'Criar Nova Classe Homebrew',
+    subclasses: editEntity ? 'Editar Subclasse Homebrew' : 'Criar Nova Subclasse Homebrew',
+    lineages: editEntity ? 'Editar Linhagem Homebrew' : 'Criar Nova Linhagem Homebrew',
   };
 
   const categoryTabs: { id: HomebrewCategory; label: string }[] = [
@@ -472,7 +519,7 @@ export function CreateHomebrewDialog({
           })),
         } : undefined;
 
-        await spellMutation.mutateAsync({
+        const spellPayload = {
           name: name.trim(),
           nameEn: nameEn.trim() || undefined,
           level,
@@ -483,8 +530,15 @@ export function CreateHomebrewDialog({
           duration: calculatedDuration,
           description: description.trim(),
           mechanicalProperties: spellMechanics,
-        });
-        toast.success('Magia Homebrew criada com sucesso!');
+        };
+
+        if (editEntity?.id) {
+          await updateSpellMutation.mutateAsync({ id: editEntity.id, data: spellPayload });
+          toast.success('Magia Homebrew atualizada com sucesso!');
+        } else {
+          await spellMutation.mutateAsync(spellPayload);
+          toast.success('Magia Homebrew criada com sucesso!');
+        }
       } else if (activeCategory === 'feats') {
         const abilityBonuses: Record<string, number> = {};
         let abilityBonusChoice: any = undefined;
@@ -515,7 +569,7 @@ export function CreateHomebrewDialog({
           finalPrerequisites = featPrerequisiteRules.map((r) => r.displayLabel).join(', ');
         }
 
-        await featMutation.mutateAsync({
+        const featPayload = {
           name: name.trim(),
           nameEn: nameEn.trim() || undefined,
           prerequisites: finalPrerequisites || undefined,
@@ -541,8 +595,15 @@ export function CreateHomebrewDialog({
                 prerequisiteRules: featPrerequisiteRules.length > 0 ? featPrerequisiteRules : undefined,
               }
             : undefined,
-        });
-        toast.success('Talento Homebrew criado com sucesso!');
+        };
+
+        if (editEntity?.id) {
+          await updateFeatMutation.mutateAsync({ id: editEntity.id, data: featPayload });
+          toast.success('Talento Homebrew atualizado com sucesso!');
+        } else {
+          await featMutation.mutateAsync(featPayload);
+          toast.success('Talento Homebrew criado com sucesso!');
+        }
       } else if (activeCategory === 'items') {
         let mechanicalProperties: any = undefined;
         if (itemCategory === 'WEAPON') {
@@ -583,7 +644,7 @@ export function CreateHomebrewDialog({
         const coinCost = coinParts.join(', ');
         const finalCost = coinCost || cost.trim() || undefined;
 
-        await itemMutation.mutateAsync({
+        const itemPayload = {
           name: name.trim(),
           nameEn: nameEn.trim() || undefined,
           itemCategory,
@@ -594,10 +655,17 @@ export function CreateHomebrewDialog({
           weight: weight.trim() || undefined,
           description: description.trim(),
           mechanicalProperties,
-        });
-        toast.success('Item Homebrew criado com sucesso!');
+        };
+
+        if (editEntity?.id) {
+          await updateItemMutation.mutateAsync({ id: editEntity.id, data: itemPayload });
+          toast.success('Item Homebrew atualizado com sucesso!');
+        } else {
+          await itemMutation.mutateAsync(itemPayload);
+          toast.success('Item Homebrew criado com sucesso!');
+        }
       } else if (activeCategory === 'classes') {
-        await classMutation.mutateAsync({
+        const classPayload = {
           name: name.trim(),
           hitDice,
           primaryAbility,
@@ -608,30 +676,51 @@ export function CreateHomebrewDialog({
           spellPreparationType: classSpellPrepType,
           subclassLevel: Math.min(20, Math.max(1, subclassLevel)),
           progressionFeats: buildProgressionFeatsPayload(progressionFeats),
-        });
-        toast.success('Classe Homebrew criada com sucesso!');
+        };
+
+        if (editEntity?.id) {
+          await updateClassMutation.mutateAsync({ id: editEntity.id, data: classPayload });
+          toast.success('Classe Homebrew atualizada com sucesso!');
+        } else {
+          await classMutation.mutateAsync(classPayload);
+          toast.success('Classe Homebrew criada com sucesso!');
+        }
       } else if (activeCategory === 'subclasses') {
         if (!parentArchetypeId) {
           setErrorMsg('Selecione a classe principal desta subclasse.');
           return;
         }
-        await subclassMutation.mutateAsync({
+        const subclassPayload = {
           archetypeId: parentArchetypeId,
           name: name.trim(),
           nameEn: nameEn.trim() || undefined,
           description: description.trim(),
           progressionFeats: buildProgressionFeatsPayload(progressionFeats),
-        });
-        toast.success('Subclasse Homebrew criada com sucesso!');
+        };
+
+        if (editEntity?.id) {
+          await updateSubclassMutation.mutateAsync({ id: editEntity.id, data: subclassPayload });
+          toast.success('Subclasse Homebrew atualizada com sucesso!');
+        } else {
+          await subclassMutation.mutateAsync(subclassPayload);
+          toast.success('Subclasse Homebrew criada com sucesso!');
+        }
       } else if (activeCategory === 'lineages') {
-        await lineageMutation.mutateAsync({
+        const lineagePayload = {
           name: name.trim(),
           description: description.trim() || undefined,
           speed,
           size,
           inlineFeats: buildProgressionFeatsPayload(lineageFeats),
-        });
-        toast.success('Linhagem Homebrew criada com sucesso!');
+        };
+
+        if (editEntity?.id) {
+          await updateLineageMutation.mutateAsync({ id: editEntity.id, data: lineagePayload });
+          toast.success('Linhagem Homebrew atualizada com sucesso!');
+        } else {
+          await lineageMutation.mutateAsync(lineagePayload);
+          toast.success('Linhagem Homebrew criada com sucesso!');
+        }
       }
 
       onClose();
@@ -676,23 +765,25 @@ export function CreateHomebrewDialog({
           </div>
 
           {/* 6 Category Switcher Tabs */}
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {categoryTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                data-testid={`homebrew-tab-${tab.id}`}
-                onClick={() => setActiveCategory(tab.id)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
-                  activeCategory === tab.id
-                    ? 'border-amber-500 bg-amber-500/20 text-amber-200'
-                    : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-amber-800/50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {!editEntity && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {categoryTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  data-testid={`homebrew-tab-${tab.id}`}
+                  onClick={() => setActiveCategory(tab.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
+                    activeCategory === tab.id
+                      ? 'border-amber-500 bg-amber-500/20 text-amber-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-amber-800/50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <p className="text-xs text-slate-400">
             Conteúdos criados recebem o selo{' '}
@@ -2398,7 +2489,7 @@ export function CreateHomebrewDialog({
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Salvar Homebrew
+                  {editEntity ? 'Salvar Alterações' : 'Salvar Homebrew'}
                 </>
               )}
             </Button>

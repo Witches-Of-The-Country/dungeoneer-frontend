@@ -32,6 +32,8 @@ export interface Feat {
   name: string;
   prerequisites?: string;
   description: string;
+  featType?: 'GENERAL' | 'ORIGIN' | 'CLASS' | 'SUBCLASS' | 'LINEAGE' | string;
+  mechanicalEffects?: any;
   source: string;
 }
 
@@ -48,6 +50,7 @@ export interface Item {
   cost: string;
   weight: string;
   description: string;
+  mechanicalProperties?: any;
   source: string;
 }
 
@@ -56,6 +59,12 @@ export interface ArchetypeSummary {
   name: string;
   hitDice: string;
   primaryAbility: string;
+  savingThrowProficiencies?: string[];
+  armorProficiencies?: string[];
+  weaponProficiencies?: string[];
+  spellcastingType?: string;
+  spellcastingAbility?: string;
+  subclassLevel?: number;
   ruleset: string;
   source: string;
 }
@@ -87,11 +96,23 @@ export interface ItemFilters extends CommonFilters {
   rarity?: string;
 }
 
+export interface FeatFilters extends CommonFilters {
+  featTypes?: string[];
+}
+
 function buildQuery(params: Record<string, any>): string {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') {
-      q.append(k, String(v));
+      if (Array.isArray(v)) {
+        v.forEach((val) => {
+          if (val !== undefined && val !== null && val !== '') {
+            q.append(k, String(val));
+          }
+        });
+      } else {
+        q.append(k, String(v));
+      }
     }
   });
   const res = q.toString();
@@ -102,7 +123,7 @@ export async function fetchSpells(filters: SpellFilters = {}): Promise<CursorPag
   return apiFetch<CursorPageResponse<Spell>>(`/api/reference/spells${buildQuery(filters)}`);
 }
 
-export async function fetchFeats(filters: CommonFilters = {}): Promise<CursorPageResponse<Feat>> {
+export async function fetchFeats(filters: FeatFilters = {}): Promise<CursorPageResponse<Feat>> {
   return apiFetch<CursorPageResponse<Feat>>(`/api/reference/feats${buildQuery(filters)}`);
 }
 
@@ -127,7 +148,7 @@ export function useInfiniteSpells(filters: Omit<SpellFilters, 'cursor'>) {
   });
 }
 
-export function useInfiniteFeats(filters: Omit<CommonFilters, 'cursor'>) {
+export function useInfiniteFeats(filters: Omit<FeatFilters, 'cursor'>) {
   return useInfiniteQuery<CursorPageResponse<Feat>, Error, InfiniteData<CursorPageResponse<Feat>>, [string, string, typeof filters], string | null>({
     queryKey: ['encyclopedia', 'feats', filters],
     queryFn: ({ pageParam }) => fetchFeats({ ...filters, cursor: pageParam }),
@@ -173,6 +194,10 @@ export async function fetchSubclasses(archetypeId: string, ruleset?: string): Pr
 
 export async function fetchProgressionFeats(archetypeId: string, level: number): Promise<Feat[]> {
   return apiFetch<Feat[]>(`/api/reference/progression-feats?archetypeId=${archetypeId}&level=${level}`);
+}
+
+export async function fetchSubclassProgressionFeats(subclassId: string, level: number): Promise<Feat[]> {
+  return apiFetch<Feat[]>(`/api/reference/subclass-progression-feats?subclassId=${subclassId}&level=${level}`);
 }
 
 export function useInfiniteLineages(filters: Omit<CommonFilters, 'cursor'>) {

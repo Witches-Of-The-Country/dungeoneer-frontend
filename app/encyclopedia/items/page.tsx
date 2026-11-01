@@ -9,6 +9,7 @@ import { SearchBar } from '@/components/encyclopedia/search-bar';
 import { ReferenceCard } from '@/components/encyclopedia/reference-card';
 import { ReferenceCardSkeleton } from '@/components/encyclopedia/reference-card-skeleton';
 import { EmptySearchResults } from '@/components/encyclopedia/empty-search-results';
+import { ItemDetailModal } from '@/components/encyclopedia/item-detail-modal';
 import { Button } from '@/components/ui/button';
 
 const ITEM_CATEGORIES = [
@@ -45,6 +46,8 @@ const RULESETS = [
 export default function ItemsPage() {
   const { isDM } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('ALL');
   const [rarity, setRarity] = useState('ALL');
@@ -103,9 +106,19 @@ export default function ItemsPage() {
       </div>
 
       <CreateHomebrewDialog
-        open={createOpen}
+        open={createOpen || !!editingItem}
         category="items"
-        onClose={() => setCreateOpen(false)}
+        editEntity={editingItem}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditingItem(null);
+        }}
+      />
+      <ItemDetailModal
+        item={selectedItem}
+        open={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+        onEdit={(it) => setEditingItem(it)}
       />
 
       <div className="space-y-3 bg-card/60 p-4 rounded-xl border border-border/60">
@@ -187,6 +200,7 @@ export default function ItemsPage() {
                 subtitle={item.nameEn}
                 badge={item.rarity || 'Comum'}
                 ruleset={item.ruleset}
+                onClick={() => setSelectedItem(item)}
                 description={item.description}
                 extraBadges={[item.itemCategory, item.itemType].filter(Boolean)}
                 metaFields={[

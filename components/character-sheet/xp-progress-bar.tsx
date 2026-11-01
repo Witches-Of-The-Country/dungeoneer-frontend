@@ -9,6 +9,7 @@ import { Sparkles, Plus } from 'lucide-react';
 interface XpProgressBarProps {
   currentXp: number;
   currentLevel: number;
+  hasPendingLevelChoices?: boolean;
   onOpenAddXp: () => void;
   onOpenLevelUp: () => void;
 }
@@ -16,10 +17,12 @@ interface XpProgressBarProps {
 export function XpProgressBar({
   currentXp,
   currentLevel,
+  hasPendingLevelChoices = false,
   onOpenAddXp,
   onOpenLevelUp,
 }: XpProgressBarProps) {
-  const { current, max, percentage, canLevelUp } = getXpProgress(currentXp, currentLevel);
+  const { current, max, percentage, canLevelUp: xpCanLevelUp } = getXpProgress(currentXp, currentLevel);
+  const canLevelUp = (xpCanLevelUp || Boolean(hasPendingLevelChoices)) && currentLevel < 20;
 
   return (
     <div className="bg-surface/80 border border-primary/20 rounded-xl p-4 shadow-lg backdrop-blur flex flex-col gap-3">
@@ -47,6 +50,7 @@ export function XpProgressBar({
           {canLevelUp && (
             <Button
               size="sm"
+              data-testid="level-up-cta-button"
               className="h-8 text-xs gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-stone-950 font-bold shadow-md shadow-amber-500/20 animate-bounce"
               onClick={onOpenLevelUp}
             >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { UserProfile, getStoredToken, getStoredUser, clearAuth } from "@/lib/api/auth";
+import { UserProfile, getStoredToken, getStoredUser, clearAuth, toggleDmRole } from "@/lib/api/auth";
 import { apiFetch } from "@/lib/api/client";
 
 export function useAuth() {
@@ -65,6 +65,12 @@ export function useAuth() {
     syncAuth();
   }, [syncAuth]);
 
+  const toggleDM = useCallback(async () => {
+    const response = await toggleDmRole();
+    syncAuth();
+    return response;
+  }, [syncAuth]);
+
   const isDM = useMemo(() => {
     if (!token || !user?.roles || !Array.isArray(user.roles)) return false;
     return user.roles.includes("DUNGEON_MASTER");
@@ -83,6 +89,7 @@ export function useAuth() {
     isDM,
     isPlayer,
     logout,
+    toggleDM,
     syncAuth,
   };
 }

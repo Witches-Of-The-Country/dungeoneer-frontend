@@ -9,6 +9,7 @@ import { SearchBar } from '@/components/encyclopedia/search-bar';
 import { ReferenceCard } from '@/components/encyclopedia/reference-card';
 import { ReferenceCardSkeleton } from '@/components/encyclopedia/reference-card-skeleton';
 import { EmptySearchResults } from '@/components/encyclopedia/empty-search-results';
+import { SpellDetailModal } from '@/components/encyclopedia/spell-detail-modal';
 import { Button } from '@/components/ui/button';
 
 const SPELL_LEVELS = [
@@ -47,6 +48,8 @@ const RULESETS = [
 export default function SpellsPage() {
   const { isDM } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedSpell, setSelectedSpell] = useState<Spell | null>(null);
+  const [editingSpell, setEditingSpell] = useState<Spell | null>(null);
   const [search, setSearch] = useState('');
   const [level, setLevel] = useState('ALL');
   const [school, setSchool] = useState('ALL');
@@ -106,9 +109,19 @@ export default function SpellsPage() {
       </div>
 
       <CreateHomebrewDialog
-        open={createOpen}
+        open={createOpen || !!editingSpell}
         category="spells"
-        onClose={() => setCreateOpen(false)}
+        editEntity={editingSpell}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditingSpell(null);
+        }}
+      />
+      <SpellDetailModal
+        spell={selectedSpell}
+        open={!!selectedSpell}
+        onClose={() => setSelectedSpell(null)}
+        onEdit={(sp) => setEditingSpell(sp)}
       />
 
       {/* Filter and Search Bar */}
@@ -192,6 +205,7 @@ export default function SpellsPage() {
                 subtitle={spell.nameEn}
                 badge={spell.level === 0 ? 'Truque' : `${spell.level}º Círculo`}
                 ruleset={spell.ruleset}
+                onClick={() => setSelectedSpell(spell)}
                 description={spell.description}
                 extraBadges={[spell.school]}
                 metaFields={[
