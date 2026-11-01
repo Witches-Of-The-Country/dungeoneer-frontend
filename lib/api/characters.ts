@@ -24,6 +24,7 @@ export interface ReferenceClass {
   weaponProficiencies?: string[];
   spellcastingType: 'NONE' | 'HALF' | 'FULL' | 'PACT' | string;
   spellcastingAbility?: string | null;
+  subclassLevel?: number;
   ruleset: Ruleset;
   source?: string;
 }
@@ -54,17 +55,26 @@ export interface ReferenceBackground {
   source?: string;
 }
 
+export interface CharacterClassSummary {
+  className: string;
+  subclassName?: string | null;
+  classLevel: number;
+}
+
 export interface CharacterSummary {
   id: string;
   name: string;
   level: number;
   ruleset: Ruleset;
   className: string;
+  subclassName?: string | null;
   lineageName: string;
   backgroundName?: string;
   hitPointsCurrent: number;
   hitPointsMax: number;
   armorClass?: number;
+  avatarUrl?: string | null;
+  classes?: CharacterClassSummary[];
   updatedAt: string;
 }
 
@@ -159,6 +169,16 @@ export interface CharacterResponse {
   hpCalculationMethod?: HpCalculationMethod;
   hasPendingLevelChoices?: boolean;
   notes?: string | null;
+  avatarUrl?: string | null;
+  currency?: {
+    cp: number;
+    sp: number;
+    ep: number;
+    gp: number;
+    pp: number;
+    totalCopper: number;
+    totalGold: number;
+  };
   abilityScores: CharacterAbilityScores;
   lineage: ReferenceLineage;
   background: ReferenceBackground;
@@ -184,6 +204,7 @@ export interface CreateCharacterPayload {
   backgroundId: string;
   archetypeId: string;
   subclassId?: string | null;
+  originFeatId?: string | null;
   abilityScoreMethod: AbilityScoreMethod;
   abilityScores: Record<AbilityKey, number>;
   abilityScoreBonuses?: Record<string, number>;
@@ -194,6 +215,7 @@ export interface CreateCharacterPayload {
   notes?: string;
   classProgressions?: ClassProgressionPayload[];
   skillProficiencies?: string[];
+  avatarUrl?: string | null;
 }
 
 export interface UpdateCharacterPayload {
@@ -201,6 +223,7 @@ export interface UpdateCharacterPayload {
   hitPointsCurrent?: number;
   hitPointsTemp?: number;
   notes?: string;
+  avatarUrl?: string | null;
 }
 
 export interface AbilityRollResponse {
@@ -691,6 +714,16 @@ export interface RestPayload {
 export interface AddCharacterItemPayload {
   itemId: string;
   quantity: number;
+  purchaseWithCurrency?: boolean;
+}
+
+export interface UpdateCurrencyPayload {
+  cp?: number;
+  sp?: number;
+  ep?: number;
+  gp?: number;
+  pp?: number;
+  consolidate?: boolean;
 }
 
 export interface UpdateCharacterItemPayload {
@@ -709,7 +742,9 @@ export function useAddExperience(characterId: string) {
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
       queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
     },
   });
 }
@@ -724,7 +759,9 @@ export function useLevelUp(characterId: string) {
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
       queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
     },
   });
 }
@@ -739,7 +776,9 @@ export function useRest(characterId: string) {
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
       queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
     },
   });
 }
@@ -753,7 +792,11 @@ export function useManageInventory(characterId: string) {
           method: 'POST',
           body: JSON.stringify(payload),
         }),
-      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
     }),
     updateItem: useMutation({
       mutationFn: ({ itemId, payload }: { itemId: string; payload: UpdateCharacterItemPayload }) =>
@@ -761,28 +804,55 @@ export function useManageInventory(characterId: string) {
           method: 'PATCH',
           body: JSON.stringify(payload),
         }),
-      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
     }),
     removeItem: useMutation({
       mutationFn: (itemId: string) =>
         apiFetch<CharacterResponse>(`/api/characters/${characterId}/items/${itemId}`, {
           method: 'DELETE',
         }),
-      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
     }),
     useConsumable: useMutation({
       mutationFn: (itemId: string) =>
         apiFetch<any>(`/api/characters/${characterId}/items/${itemId}/use`, {
           method: 'POST',
         }),
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['character', characterId] }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['character', characterId] });
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+    updateCurrency: useMutation({
+      mutationFn: (payload: UpdateCurrencyPayload) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/currency`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        }),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
     }),
     useFeat: useMutation({
       mutationFn: (featId: string) =>
         apiFetch<CharacterResponse>(`/api/characters/${characterId}/feats/${featId}/use`, {
           method: 'POST',
         }),
-      onSuccess: (data) => queryClient.setQueryData(['character', characterId], data),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
     }),
   };
 }
