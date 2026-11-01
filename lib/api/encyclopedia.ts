@@ -75,6 +75,8 @@ export interface LineageSummary {
   speed: number;
   size: string;
   description?: string;
+  abilityBonuses?: Record<string, number>;
+  traitsSummary?: string[];
   ruleset: string;
   source: string;
 }
