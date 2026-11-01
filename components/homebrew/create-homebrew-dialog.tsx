@@ -128,6 +128,73 @@ export function CreateHomebrewDialog({
       if (editEntity.costEp !== undefined) setItemCostEp(editEntity.costEp || 0);
       if (editEntity.costGp !== undefined) setItemCostGp(editEntity.costGp || 0);
       if (editEntity.costPp !== undefined) setItemCostPp(editEntity.costPp || 0);
+      if (editEntity.cost && typeof editEntity.cost === 'string' && !editEntity.costGp && !editEntity.costSp && !editEntity.costCp) {
+        const gpMatch = editEntity.cost.match(/(\d+)\s*po/i);
+        if (gpMatch) setItemCostGp(parseInt(gpMatch[1], 10));
+        const spMatch = editEntity.cost.match(/(\d+)\s*pp/i);
+        if (spMatch) setItemCostSp(parseInt(spMatch[1], 10));
+        const cpMatch = editEntity.cost.match(/(\d+)\s*pc/i);
+        if (cpMatch) setItemCostCp(parseInt(cpMatch[1], 10));
+        const epMatch = editEntity.cost.match(/(\d+)\s*pe/i);
+        if (epMatch) setItemCostEp(parseInt(epMatch[1], 10));
+        const ppMatch = editEntity.cost.match(/(\d+)\s*pl/i);
+        if (ppMatch) setItemCostPp(parseInt(ppMatch[1], 10));
+      }
+      const itemMechanics = editEntity.mechanicalProperties;
+      if (itemMechanics) {
+        const rolls = itemMechanics.damageRolls || editEntity.damageRolls;
+        if (Array.isArray(rolls) && rolls.length > 0) {
+          setWeaponDamageRolls(
+            rolls.map((r: any) => {
+              let count = r.diceCount ?? 1;
+              let type = r.diceType ?? 8;
+              if (r.diceFormula && (!r.diceCount || !r.diceType)) {
+                const match = String(r.diceFormula).match(/(\d+)d(\d+)/i);
+                if (match) {
+                  count = parseInt(match[1], 10);
+                  type = parseInt(match[2], 10);
+                }
+              }
+              return {
+                diceCount: count,
+                diceType: type,
+                damageType: r.damageType || 'SLASHING',
+                bonusModifier: r.bonusModifier || 0,
+                conditional: !!r.conditional,
+                conditionNote: r.conditionNote || '',
+              };
+            })
+          );
+        }
+        const props = itemMechanics.weaponProperties || itemMechanics.properties || editEntity.properties;
+        if (Array.isArray(props)) {
+          setWeaponProps(props);
+        }
+        if (itemMechanics.versatileDice) {
+          setWeaponVersatileDice(itemMechanics.versatileDice);
+        }
+        if (itemMechanics.magicBonus !== undefined) {
+          setWeaponMagicBonus(itemMechanics.magicBonus);
+        }
+        if (itemMechanics.baseAc !== undefined) {
+          setArmorBaseAc(itemMechanics.baseAc);
+        }
+        if (itemMechanics.armorCategory) {
+          setArmorCategory(itemMechanics.armorCategory);
+        }
+        if (itemMechanics.strengthRequirement !== undefined) {
+          setArmorStrReq(itemMechanics.strengthRequirement);
+        }
+        if (itemMechanics.stealthDisadvantage !== undefined) {
+          setArmorStealthDisadv(itemMechanics.stealthDisadvantage);
+        }
+        if (itemMechanics.effectType) {
+          setConsumableEffectType(itemMechanics.effectType);
+        }
+        if (itemMechanics.diceFormula) {
+          setConsumableDiceFormula(itemMechanics.diceFormula);
+        }
+      }
       if (editEntity.speed !== undefined) setSpeed(editEntity.speed);
       if (editEntity.size !== undefined) setSize(editEntity.size);
       if (editEntity.hitDice) setHitDice(editEntity.hitDice);
@@ -609,6 +676,7 @@ export function CreateHomebrewDialog({
         if (itemCategory === 'WEAPON') {
           mechanicalProperties = {
             damageRolls: weaponDamageRolls.map((r) => ({
+              diceFormula: `${Math.max(1, r.diceCount)}d${r.diceType}`,
               diceCount: Math.max(1, r.diceCount),
               diceType: r.diceType,
               damageType: r.damageType,
@@ -617,6 +685,7 @@ export function CreateHomebrewDialog({
               conditionNote: r.conditionNote.trim() || undefined,
             })),
             weaponProperties: weaponProps,
+            properties: weaponProps,
             versatileDice: weaponVersatileDice.trim() || undefined,
             magicBonus: weaponMagicBonus || undefined,
           };

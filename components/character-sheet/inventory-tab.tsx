@@ -13,6 +13,9 @@ import { Shield, Sparkles, Trash2, Heart, Plus, ShoppingBag, X } from 'lucide-re
 import { toast } from 'sonner';
 import { CurrencyPouchCard } from './currency-pouch-card';
 import { ItemCatalogModal } from './item-catalog-modal';
+import { ItemDetailModal } from '@/components/encyclopedia/item-detail-modal';
+import type { Item } from '@/lib/api/encyclopedia';
+import { Info } from 'lucide-react';
 
 interface InventoryTabProps {
   character: CharacterResponse;
@@ -24,6 +27,26 @@ export function InventoryTab({ character }: InventoryTabProps) {
 
   const attunedCount = inventory.filter((i) => i.attuned).length;
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [inspectItem, setInspectItem] = useState<Item | null>(null);
+
+  const handleInspect = (charItem: CharacterItem) => {
+    const itemModel: Item = {
+      id: charItem.itemId || charItem.id,
+      slug: charItem.slug || '',
+      name: charItem.name || charItem.itemName || 'Item',
+      itemCategory: charItem.itemCategory,
+      itemType: charItem.itemType || charItem.itemCategory,
+      rarity: charItem.rarity || 'Comum',
+      attunement: !!(charItem.requiresAttunement ?? charItem.attunement),
+      cost: charItem.cost || '',
+      weight: charItem.weight || '',
+      description: charItem.description || '',
+      mechanicalProperties: charItem.mechanicalProperties,
+      ruleset: (charItem.ruleset as any) || character.ruleset,
+      source: (charItem as any).source || 'SRD',
+    };
+    setInspectItem(itemModel);
+  };
 
   const handleToggleEquip = (item: CharacterItem) => {
     updateItem.mutate(
@@ -123,15 +146,22 @@ export function InventoryTab({ character }: InventoryTabProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {inventory.map((item) => {
             const isConsumable = item.itemCategory?.toUpperCase() === 'CONSUMABLE';
+            const displayName = item.name || item.itemName || 'Item';
+            const reqAttune = item.requiresAttunement ?? item.attunement;
             return (
               <Card
                 key={item.id}
                 className="bg-surface/60 border-primary/20 hover:border-primary/40 transition-colors"
               >
                 <CardHeader className="p-4 pb-2 flex flex-row items-start justify-between space-y-0">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-                      {item.itemName}
+                  <div
+                    onClick={() => handleInspect(item)}
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer group select-none"
+                  >
+                    <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2 group-hover:text-amber-300 transition-colors">
+                      {displayName}
                       <span className="text-xs font-mono font-normal text-muted-foreground">
                         x{item.quantity}
                       </span>
@@ -140,7 +170,7 @@ export function InventoryTab({ character }: InventoryTabProps) {
                       <Badge variant="outline" className="text-[10px] uppercase font-mono border-primary/30">
                         {item.itemCategory}
                       </Badge>
-                      {item.attunement && (
+                      {reqAttune && (
                         <Badge
                           variant="secondary"
                           className={`text-[10px] ${item.attuned ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : ''}`}
@@ -156,19 +186,36 @@ export function InventoryTab({ character }: InventoryTabProps) {
                     </div>
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
-                    onClick={() => handleDelete(item)}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-300"
+                      onClick={() => handleInspect(item)}
+                      title="Ver detalhes"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
+                      onClick={() => handleDelete(item)}
+                      title="Remover"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </CardHeader>
 
                 <CardContent className="p-4 pt-2 space-y-3">
                   {item.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
+                    <p
+                      onClick={() => handleInspect(item)}
+                      className="text-xs text-muted-foreground line-clamp-2 cursor-pointer hover:text-slate-300"
+                    >
+                      {item.description}
+                    </p>
                   )}
 
                   <div className="flex gap-2 pt-1">
@@ -184,7 +231,7 @@ export function InventoryTab({ character }: InventoryTabProps) {
                       </Button>
                     )}
 
-                    {item.attunement && (
+                    {reqAttune && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -213,6 +260,12 @@ export function InventoryTab({ character }: InventoryTabProps) {
           })}
         </div>
       )}
+
+      <ItemDetailModal
+        item={inspectItem}
+        open={!!inspectItem}
+        onClose={() => setInspectItem(null)}
+      />
     </div>
   );
 }

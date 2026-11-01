@@ -313,11 +313,24 @@ export default function CharacterSheetPage() {
                   </button>
                 )}
               </div>
-              <p className="text-sm text-slate-300">
-                Nível {character.level} • {character.archetype?.name ?? "Classe"}{" "}
-                • {character.lineage?.name ?? "Linhagem"} •{" "}
-                {character.background?.name ?? "Antecedente"}
-              </p>
+              {(() => {
+                const classDisplay =
+                  character.classes && character.classes.length > 0
+                    ? character.classes
+                        .map(
+                          (c) =>
+                            `${c.className}${c.subclassName ? ` (${c.subclassName})` : ""}${character.classes!.length > 1 ? ` ${c.classLevel}` : ""}`
+                        )
+                        .join(" / ")
+                    : (character.archetype?.name ?? "Classe");
+                return (
+                  <p className="text-sm text-slate-300">
+                    Nível {character.level} • {classDisplay} •{" "}
+                    {character.lineage?.name ?? "Linhagem"} •{" "}
+                    {character.background?.name ?? "Antecedente"}
+                  </p>
+                );
+              })()}
             </div>
           </div>
 

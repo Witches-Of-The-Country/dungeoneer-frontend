@@ -111,14 +111,18 @@ export interface CharacterItem {
   id: string;
   characterId: string;
   itemId: string;
-  itemName: string;
+  name?: string;
+  itemName?: string;
   itemCategory: string;
   itemType: string;
   rarity: string;
+  requiresAttunement?: boolean;
   attunement: boolean;
   cost?: string;
   weight?: string;
   description?: string;
+  slug?: string;
+  ruleset?: string;
   quantity: number;
   equipped: boolean;
   attuned: boolean;
@@ -140,12 +144,13 @@ export interface CharacterFeat {
 }
 
 export interface CharacterAction {
-  id: string;
+  id?: string;
   name: string;
-  actionType: 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE' | string;
-  sourceType: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | string;
+  actionType: 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE' | 'SPECIAL' | string;
+  category?: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | 'CUSTOM' | string;
+  sourceType?: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | 'CUSTOM' | string;
   attackBonus?: number | null;
-  damageRolls?: Array<{ diceCount: number; diceType: number; damageType: string; bonusModifier?: number }>;
+  damageRolls?: Array<{ diceCount?: number; diceType?: number; diceFormula?: string; damageType: string; bonusModifier?: number }>;
   versatileDice?: string | null;
   description?: string | null;
   usesRemaining?: number | null;
@@ -184,6 +189,7 @@ export interface CharacterResponse {
   background: ReferenceBackground;
   archetype: ReferenceClass;
   classProgressions?: ClassProgression[];
+  classes?: CharacterClassSummary[];
   skillProficiencies?: string[];
   savingThrows?: Record<string, number>;
   skills?: Record<string, number>;
