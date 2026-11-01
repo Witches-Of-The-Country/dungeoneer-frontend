@@ -791,6 +791,22 @@ export function useRest(characterId: string) {
   });
 }
 
+export function useUseFeat(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (featId: string) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/feats/${featId}/use`, {
+        method: 'POST',
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+    },
+  });
+}
+
 export function useManageInventory(characterId: string) {
   const queryClient = useQueryClient();
   return {

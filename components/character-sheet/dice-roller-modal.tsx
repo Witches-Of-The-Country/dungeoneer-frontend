@@ -18,6 +18,7 @@ interface DiceRollerModalProps {
   attackBonus?: number | null;
   damageFormula?: string;
   isHealing?: boolean;
+  onApplyHealing?: (amount: number) => void;
 }
 
 export function DiceRollerModal({
@@ -27,6 +28,7 @@ export function DiceRollerModal({
   attackBonus,
   damageFormula,
   isHealing,
+  onApplyHealing,
 }: DiceRollerModalProps) {
   const isAdvantage =
     (damageFormula && damageFormula.toLowerCase().includes('2d20kh1')) ||
@@ -161,17 +163,28 @@ export function DiceRollerModal({
                   </span>
                 </div>
               </div>
-              <Button
-                size="sm"
-                onClick={rollEffect}
-                className={
-                  isHealing
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-bold'
-                    : 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-semibold'
-                }
-              >
-                {isHealing ? 'Rolar Cura' : 'Rolar Dano'}
-              </Button>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  size="sm"
+                  onClick={rollEffect}
+                  className={
+                    isHealing
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-bold'
+                      : 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-semibold'
+                  }
+                >
+                  {isHealing ? 'Rolar Cura' : 'Rolar Dano'}
+                </Button>
+                {isHealing && effectResult !== null && onApplyHealing && (
+                  <Button
+                    size="sm"
+                    onClick={() => onApplyHealing(effectResult)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-extrabold shadow-md animate-pulse text-xs"
+                  >
+                    Aplicar aos PV (+{effectResult} PV)
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>

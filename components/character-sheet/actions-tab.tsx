@@ -1,7 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CharacterResponse, CharacterAction } from '@/lib/api/characters';
+import {
+  CharacterResponse,
+  CharacterAction,
+  useUpdateCharacter,
+  useUseFeat,
+} from '@/lib/api/characters';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +25,9 @@ interface ActionsTabProps {
 }
 
 export function ActionsTab({ character }: ActionsTabProps) {
+  const updateCharacterMutation = useUpdateCharacter();
+  const useFeatMutation = useUseFeat(character.id);
+
   const baseActions = character.actions || [];
   const [customActions, setCustomActions] = useState<CharacterAction[]>([]);
   const [activeRoll, setActiveRoll] = useState<{
@@ -27,7 +35,30 @@ export function ActionsTab({ character }: ActionsTabProps) {
     attackBonus?: number | null;
     damageFormula?: string;
     isHealing?: boolean;
+    actionId?: string;
+    category?: string;
   } | null>(null);
+
+  const handleApplyHealing = (amount: number) => {
+    const nextHp = Math.min(character.hitPointsMax, character.hitPointsCurrent + amount);
+    updateCharacterMutation.mutate(
+      {
+        id: character.id,
+        payload: { hitPointsCurrent: nextHp },
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Cura de +${amount} PV aplicada! Vida atual: ${nextHp}/${character.hitPointsMax} PV.`
+          );
+          if (activeRoll?.actionId && activeRoll.category === 'FEAT') {
+            useFeatMutation.mutate(activeRoll.actionId);
+          }
+          setActiveRoll(null);
+        },
+      }
+    );
+  };
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newActionName, setNewActionName] = useState('');
@@ -207,46 +238,78 @@ export function ActionsTab({ character }: ActionsTabProps) {
                     </div>
                   </div>
 
-                  {/* Display Rolar button when rollable */}
-                  {isRollable ? (
-                    healing ? (
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {maxCharges ? (
+                      <Badge
+                        variant="outline"
+                        className={`font-mono text-xs px-2 py-0.5 ${
+                          (currentCharges ?? maxCharges) > 0
+                            ? 'bg-amber-950/40 text-amber-300 border-amber-600/40'
+                            : 'bg-red-950/40 text-red-400 border-red-800/40'
+                        }`}
+                      >
+                        {currentCharges !== undefined && currentCharges !== null ? currentCharges : maxCharges} / {maxCharges} usos
+                      </Badge>
+                    ) : null}
+
+                    {act.id && act.category === 'FEAT' && !isRollable && maxCharges && (currentCharges ?? maxCharges) > 0 && (
                       <Button
                         size="sm"
-                        className="h-8 text-xs gap-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 font-semibold"
-                        onClick={() =>
-                          setActiveRoll({
-                            title: act.name,
-                            attackBonus: effectiveAttackBonus,
-                            damageFormula: formula,
-                            isHealing: true,
-                          })
-                        }
+                        variant="outline"
+                        disabled={useFeatMutation.isPending}
+                        className="h-7 text-xs px-2 border-slate-700 hover:border-amber-600 text-slate-300"
+                        onClick={() => {
+                          useFeatMutation.mutate(act.id!, {
+                            onSuccess: () => toast.success(`1 uso de ${act.name} consumido.`),
+                          });
+                        }}
                       >
-                        <Heart className="w-3.5 h-3.5" />
-                        Rolar Cura
+                        Gastar
                       </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs gap-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200 font-semibold"
-                        onClick={() =>
-                          setActiveRoll({
-                            title: act.name,
-                            attackBonus: effectiveAttackBonus,
-                            damageFormula: formula,
-                            isHealing: false,
-                          })
-                        }
-                      >
-                        <Dices className="w-3.5 h-3.5" />
-                        {isReckless ? 'Rolar c/ Vantagem' : 'Rolar'}
-                      </Button>
-                    )
-                  ) : maxCharges ? (
-                    <Badge className="bg-amber-950/40 text-amber-300 border border-amber-600/40 font-mono text-xs">
-                      {currentCharges !== undefined && currentCharges !== null ? currentCharges : maxCharges} / {maxCharges} usos
-                    </Badge>
-                  ) : null}
+                    )}
+
+                    {isRollable && (
+                      healing ? (
+                        <Button
+                          size="sm"
+                          disabled={maxCharges !== undefined && maxCharges !== null && (currentCharges ?? maxCharges) <= 0}
+                          className="h-8 text-xs gap-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 font-semibold disabled:opacity-50"
+                          onClick={() =>
+                            setActiveRoll({
+                              title: act.name,
+                              attackBonus: effectiveAttackBonus,
+                              damageFormula: formula,
+                              isHealing: true,
+                              actionId: act.id,
+                              category: act.category,
+                            })
+                          }
+                        >
+                          <Heart className="w-3.5 h-3.5" />
+                          Rolar Cura
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={maxCharges !== undefined && maxCharges !== null && (currentCharges ?? maxCharges) <= 0}
+                          className="h-8 text-xs gap-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200 font-semibold disabled:opacity-50"
+                          onClick={() =>
+                            setActiveRoll({
+                              title: act.name,
+                              attackBonus: effectiveAttackBonus,
+                              damageFormula: formula,
+                              isHealing: false,
+                              actionId: act.id,
+                              category: act.category,
+                            })
+                          }
+                        >
+                          <Dices className="w-3.5 h-3.5" />
+                          {isReckless ? 'Rolar c/ Vantagem' : 'Rolar'}
+                        </Button>
+                      )
+                    )}
+                  </div>
                 </CardHeader>
 
                 <CardContent className="p-4 pt-2 space-y-2 text-xs text-muted-foreground">
@@ -440,6 +503,7 @@ export function ActionsTab({ character }: ActionsTabProps) {
           attackBonus={activeRoll.attackBonus}
           damageFormula={activeRoll.damageFormula}
           isHealing={activeRoll.isHealing}
+          onApplyHealing={handleApplyHealing}
         />
       )}
     </div>
