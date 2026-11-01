@@ -12,14 +12,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { CharacterResponse, useLevelUp, HpCalculationMethod } from '@/lib/api/characters';
 import { fetchSubclasses, fetchProgressionFeats, Subclass, Feat } from '@/lib/api/encyclopedia';
 import { Sparkles, Heart, Shield, Award, Wand2, ChevronRight, Check } from 'lucide-react';
@@ -169,18 +161,18 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
                 <Label className="text-amber-400 font-bold flex items-center gap-1.5">
                   <Wand2 className="w-4 h-4" /> Escolha sua Subclasse (Especialização)
                 </Label>
-                <Select value={selectedSubclassId} onValueChange={setSelectedSubclassId}>
-                  <SelectTrigger className="border-amber-500/40 bg-background">
-                    <SelectValue placeholder="Selecione um Arquétipo / Subclasse" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface border-primary/20">
-                    {subclasses.map((sc) => (
-                      <SelectItem key={sc.id} value={sc.id}>
-                        {sc.name} ({sc.nameEn})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  value={selectedSubclassId}
+                  onChange={(e) => setSelectedSubclassId(e.target.value)}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-amber-500/40 bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">Selecione um Arquétipo / Subclasse</option>
+                  {subclasses.map((sc) => (
+                    <option key={sc.id} value={sc.id}>
+                      {sc.name} ({sc.nameEn})
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 
@@ -207,9 +199,21 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Método de Ganho de Pontos de Vida (HP)</Label>
-              <RadioGroup value={hpMethod} onValueChange={(val) => setHpMethod(val as HpCalculationMethod)}>
-                <div className="flex items-center space-x-2 p-3 rounded border border-primary/20 bg-background/40">
-                  <RadioGroupItem value="AVERAGE" id="hp-avg" />
+              <div className="space-y-2">
+                <div
+                  className={`flex items-center space-x-2 p-3 rounded border cursor-pointer ${
+                    hpMethod === 'AVERAGE' ? 'border-primary bg-primary/10' : 'border-primary/20 bg-background/40'
+                  }`}
+                  onClick={() => setHpMethod('AVERAGE')}
+                >
+                  <input
+                    type="radio"
+                    name="hp-method"
+                    id="hp-avg"
+                    checked={hpMethod === 'AVERAGE'}
+                    onChange={() => setHpMethod('AVERAGE')}
+                    className="accent-primary"
+                  />
                   <Label htmlFor="hp-avg" className="cursor-pointer flex-1">
                     <span className="font-bold">Média Segura</span>
                     <p className="text-xs text-muted-foreground">
@@ -218,14 +222,26 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
                   </Label>
                 </div>
 
-                <div className="flex items-center space-x-2 p-3 rounded border border-primary/20 bg-background/40">
-                  <RadioGroupItem value="ROLLED" id="hp-roll" />
+                <div
+                  className={`flex items-center space-x-2 p-3 rounded border cursor-pointer ${
+                    hpMethod === 'ROLLED' ? 'border-primary bg-primary/10' : 'border-primary/20 bg-background/40'
+                  }`}
+                  onClick={() => setHpMethod('ROLLED')}
+                >
+                  <input
+                    type="radio"
+                    name="hp-method"
+                    id="hp-roll"
+                    checked={hpMethod === 'ROLLED'}
+                    onChange={() => setHpMethod('ROLLED')}
+                    className="accent-primary"
+                  />
                   <Label htmlFor="hp-roll" className="cursor-pointer flex-1">
                     <span className="font-bold">Rolar Dado ({character.archetype?.hitDice})</span>
                     <p className="text-xs text-muted-foreground">Teste sua sorte rolando o dado de vida da classe.</p>
                   </Label>
                 </div>
-              </RadioGroup>
+              </div>
             </div>
 
             {hpMethod === 'ROLLED' && (
@@ -281,37 +297,35 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
 
               <div className="space-y-2">
                 <Label>Atributo Principal (+{asiPlusTwo ? '2' : '1'})</Label>
-                <Select value={primaryStat} onValueChange={setPrimaryStat}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-surface">
-                    {['STRENGTH', 'DEXTERITY', 'CONSTITUTION', 'INTELLIGENCE', 'WISDOM', 'CHARISMA'].map((stat) => (
-                      <SelectItem key={stat} value={stat}>
-                        {stat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  value={primaryStat}
+                  onChange={(e) => setPrimaryStat(e.target.value)}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-primary/20 bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {['STRENGTH', 'DEXTERITY', 'CONSTITUTION', 'INTELLIGENCE', 'WISDOM', 'CHARISMA'].map((stat) => (
+                    <option key={stat} value={stat}>
+                      {stat}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {!asiPlusTwo && (
                 <div className="space-y-2">
                   <Label>Segundo Atributo (+1)</Label>
-                  <Select value={secondaryStat} onValueChange={setSecondaryStat}>
-                    <SelectTrigger className="bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-surface">
-                      {['STRENGTH', 'DEXTERITY', 'CONSTITUTION', 'INTELLIGENCE', 'WISDOM', 'CHARISMA']
-                        .filter((s) => s !== primaryStat)
-                        .map((stat) => (
-                          <SelectItem key={stat} value={stat}>
-                            {stat}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={secondaryStat}
+                    onChange={(e) => setSecondaryStat(e.target.value)}
+                    className="w-full h-10 px-3 py-2 rounded-md border border-primary/20 bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    {['STRENGTH', 'DEXTERITY', 'CONSTITUTION', 'INTELLIGENCE', 'WISDOM', 'CHARISMA']
+                      .filter((s) => s !== primaryStat)
+                      .map((stat) => (
+                        <option key={stat} value={stat}>
+                          {stat}
+                        </option>
+                      ))}
+                  </select>
                 </div>
               )}
             </div>

@@ -239,10 +239,21 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
     expect(await screen.findByText('Nova anotação da campanha')).toBeInTheDocument();
     expect(screen.getByText('Encontramos rastros no rio.')).toBeInTheDocument();
 
-    // Placeholder Tabs: Ações, Magias, Inventário, Talentos
-    for (const placeholderTab of ['Ações', 'Magias', 'Inventário', 'Talentos']) {
-      fireEvent.click(screen.getByRole('tab', { name: placeholderTab }));
-      expect(screen.getByText('Em breve')).toBeInTheDocument();
-    }
+    // Active & Placeholder Tabs
+    // Magias continues to be placeholder
+    fireEvent.click(screen.getByRole('tab', { name: 'Magias' }));
+    expect(screen.getByText('Em breve')).toBeInTheDocument();
+
+    // Ações tab is active
+    fireEvent.click(screen.getByRole('tab', { name: 'Ações' }));
+    expect(screen.getByText('Nenhuma ação ofensiva ou de combate disponível.')).toBeInTheDocument();
+
+    // Inventário tab is active
+    fireEvent.click(screen.getByRole('tab', { name: 'Inventário' }));
+    expect(screen.getByText('Nenhum item presente no inventário deste personagem.')).toBeInTheDocument();
+
+    // Talentos tab is active
+    fireEvent.click(screen.getByRole('tab', { name: 'Talentos' }));
+    expect(screen.getByText('Nenhum talento ou habilidade de classe registrado.')).toBeInTheDocument();
   });
 });

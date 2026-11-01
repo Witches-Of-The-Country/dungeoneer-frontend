@@ -49,6 +49,12 @@ import {
 import { DeleteCharacterModal } from "@/components/delete-character-modal";
 import { NoteCard } from "@/components/note-card";
 import { AddNoteForm } from "@/components/add-note-form";
+import { XpProgressBar } from "@/components/character-sheet/xp-progress-bar";
+import { AddXpModal } from "@/components/character-sheet/add-xp-modal";
+import { LevelUpWizardModal } from "@/components/character-sheet/level-up-wizard-modal";
+import { InventoryTab } from "@/components/character-sheet/inventory-tab";
+import { FeatsTab } from "@/components/character-sheet/feats-tab";
+import { ActionsTab } from "@/components/character-sheet/actions-tab";
 
 type SheetTab =
   | "Resumo"
@@ -87,6 +93,8 @@ export default function CharacterSheetPage() {
 
   const [activeTab, setActiveTab] = useState<SheetTab>("Resumo");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAddXpModal, setShowAddXpModal] = useState(false);
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
   const [damageAmount, setDamageAmount] = useState("");
   const [healAmount, setHealAmount] = useState("");
 
@@ -210,6 +218,13 @@ export default function CharacterSheetPage() {
       </div>
 
       {/* Sheet Header */}
+      <XpProgressBar
+        currentXp={character.experiencePoints || 0}
+        currentLevel={character.level}
+        onOpenAddXp={() => setShowAddXpModal(true)}
+        onOpenLevelUp={() => setShowLevelUpModal(true)}
+      />
+
       <Card className="bg-slate-900/90 border border-amber-900/40 shadow-2xl">
         <CardContent className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1.5">
@@ -677,51 +692,67 @@ export default function CharacterSheetPage() {
         </div>
       )}
 
-      {/* PLACEHOLDER TABS: AÇÕES, MAGIAS, INVENTÁRIO, TALENTOS */}
-      {(activeTab === "Ações" ||
-        activeTab === "Magias" ||
-        activeTab === "Inventário" ||
-        activeTab === "Talentos") && (
-        <div className="space-y-6">
-          {activeTab === "Talentos" &&
-            character.background?.originFeatName && (
-              <Card className="bg-slate-900/85 border border-amber-700/50 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-lg font-serif text-amber-300 flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-amber-400" />
-                    Talento de Origem: {character.background.originFeatName}
-                  </CardTitle>
-                  {character.background.originFeatDescription && (
-                    <CardDescription className="text-slate-300">
-                      {character.background.originFeatDescription}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-              </Card>
-            )}
+      {/* TAB 5: AÇÕES */}
+      {activeTab === "Ações" && <ActionsTab character={character} />}
 
+      {/* TAB 6: INVENTÁRIO */}
+      {activeTab === "Inventário" && <InventoryTab character={character} />}
+
+      {/* TAB 7: TALENTOS */}
+      {activeTab === "Talentos" && (
+        <div className="space-y-4">
+          {character.background?.originFeatName && (
+            <Card className="bg-slate-900/85 border border-amber-700/50 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-lg font-serif text-amber-300 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  Talento de Origem: {character.background.originFeatName}
+                </CardTitle>
+                {character.background.originFeatDescription && (
+                  <CardDescription className="text-slate-300">
+                    {character.background.originFeatDescription}
+                  </CardDescription>
+                )}
+              </CardHeader>
+            </Card>
+          )}
+          <FeatsTab character={character} />
+        </div>
+      )}
+
+      {/* PLACEHOLDER TAB: MAGIAS */}
+      {activeTab === "Magias" && (
+        <div className="space-y-6">
           <Card className="bg-slate-900/80 border border-amber-900/40 shadow-xl text-center py-12 px-6">
             <CardHeader className="items-center space-y-3">
               <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                {activeTab === "Ações" && <Swords className="w-7 h-7" />}
-                {activeTab === "Magias" && <BookOpen className="w-7 h-7" />}
-                {activeTab === "Inventário" && <Backpack className="w-7 h-7" />}
-                {activeTab === "Talentos" && <Star className="w-7 h-7" />}
+                <BookOpen className="w-7 h-7" />
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 Em breve
               </span>
               <CardTitle className="text-2xl font-serif text-amber-100">
-                Módulo de {activeTab} em Desenvolvimento
+                Grimório de Magias em Desenvolvimento
               </CardTitle>
               <CardDescription className="text-slate-400 max-w-md mx-auto">
-                Os pergaminhos de {activeTab.toLowerCase()} serão desbloqueados
-                nas próximas atualizações da plataforma Dungeoneer.
+                O módulo completo de preparação e slots de magias será desbloqueado nas próximas atualizações.
               </CardDescription>
             </CardHeader>
           </Card>
         </div>
       )}
+
+      <AddXpModal
+        isOpen={showAddXpModal}
+        onClose={() => setShowAddXpModal(false)}
+        characterId={character.id}
+      />
+
+      <LevelUpWizardModal
+        isOpen={showLevelUpModal}
+        onClose={() => setShowLevelUpModal(false)}
+        character={character}
+      />
 
       <DeleteCharacterModal
         open={showDeleteModal}
