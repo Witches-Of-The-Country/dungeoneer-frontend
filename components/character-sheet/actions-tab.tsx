@@ -26,6 +26,7 @@ export function ActionsTab({ character }: ActionsTabProps) {
     title: string;
     attackBonus?: number | null;
     damageFormula?: string;
+    isHealing?: boolean;
   } | null>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -116,7 +117,9 @@ export function ActionsTab({ character }: ActionsTabProps) {
   const isHealingAction = (action: CharacterAction) => {
     const lowerName = action.name.toLowerCase();
     const lowerDesc = (action.description || '').toLowerCase();
+    const firstType = action.damageRolls?.[0]?.damageType;
     return (
+      firstType === 'HEALING' ||
       lowerName.includes('fôlego') ||
       lowerName.includes('wind') ||
       lowerName.includes('cura') ||
@@ -154,9 +157,23 @@ export function ActionsTab({ character }: ActionsTabProps) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {allActions.map((act, index) => {
-            const formula = getFormula(act);
-            const isRollable = (act.attackBonus !== null && act.attackBonus !== undefined) || !!formula;
+            const rawFormula = getFormula(act);
+            const isReckless =
+              act.name.toLowerCase().includes('descuidado') || act.name.toLowerCase().includes('reckless');
+            let formula = rawFormula;
+            let effectiveAttackBonus = act.attackBonus;
+            if (isReckless) {
+              formula = formula || '2d20kh1';
+              if (effectiveAttackBonus === null || effectiveAttackBonus === undefined) {
+                const strScore = (character.abilityScores as any)?.strength ?? 10;
+                const strMod = Math.floor((strScore - 10) / 2);
+                effectiveAttackBonus = strMod + (character.proficiencyBonus || 2);
+              }
+            }
+
             const healing = isHealingAction(act);
+            const isRollable =
+              (effectiveAttackBonus !== null && effectiveAttackBonus !== undefined) || !!formula;
             const maxCharges = act.maxCharges ?? act.maxUses;
             const currentCharges = act.usesRemaining ?? act.currentCharges;
 
@@ -190,22 +207,41 @@ export function ActionsTab({ character }: ActionsTabProps) {
                     </div>
                   </div>
 
-                  {/* Only display Rolar button if action has attack or dice formula */}
+                  {/* Display Rolar button when rollable */}
                   {isRollable ? (
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs gap-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200 font-semibold"
-                      onClick={() =>
-                        setActiveRoll({
-                          title: act.name,
-                          attackBonus: act.attackBonus,
-                          damageFormula: formula,
-                        })
-                      }
-                    >
-                      <Dices className="w-3.5 h-3.5" />
-                      Rolar
-                    </Button>
+                    healing ? (
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 font-semibold"
+                        onClick={() =>
+                          setActiveRoll({
+                            title: act.name,
+                            attackBonus: effectiveAttackBonus,
+                            damageFormula: formula,
+                            isHealing: true,
+                          })
+                        }
+                      >
+                        <Heart className="w-3.5 h-3.5" />
+                        Rolar Cura
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-200 font-semibold"
+                        onClick={() =>
+                          setActiveRoll({
+                            title: act.name,
+                            attackBonus: effectiveAttackBonus,
+                            damageFormula: formula,
+                            isHealing: false,
+                          })
+                        }
+                      >
+                        <Dices className="w-3.5 h-3.5" />
+                        {isReckless ? 'Rolar c/ Vantagem' : 'Rolar'}
+                      </Button>
+                    )
                   ) : maxCharges ? (
                     <Badge className="bg-amber-950/40 text-amber-300 border border-amber-600/40 font-mono text-xs">
                       {currentCharges !== undefined && currentCharges !== null ? currentCharges : maxCharges} / {maxCharges} usos
@@ -214,20 +250,24 @@ export function ActionsTab({ character }: ActionsTabProps) {
                 </CardHeader>
 
                 <CardContent className="p-4 pt-2 space-y-2 text-xs text-muted-foreground">
-                  {act.attackBonus !== null && act.attackBonus !== undefined && (
+                  {effectiveAttackBonus !== null && effectiveAttackBonus !== undefined && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Bônus de Ataque:</span>
+                      <span className="text-slate-400">
+                        {isReckless ? 'Bônus de Ataque (c/ Vantagem):' : 'Bônus de Ataque:'}
+                      </span>
                       <span className="font-mono font-bold text-foreground">
-                        {act.attackBonus >= 0 ? `+${act.attackBonus}` : act.attackBonus}
+                        {effectiveAttackBonus >= 0 ? `+${effectiveAttackBonus}` : effectiveAttackBonus}
                       </span>
                     </div>
                   )}
 
                   {formula && !healing && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Dano:</span>
+                      <span className="text-slate-400">
+                        {isReckless ? 'Fórmula de Rolagem:' : 'Dano:'}
+                      </span>
                       <span className="font-mono font-bold text-red-400">
-                        {formula} {act.damageRolls?.[0]?.damageType}
+                        {formula} {act.damageRolls?.[0]?.damageType || ''}
                       </span>
                     </div>
                   )}
@@ -399,6 +439,7 @@ export function ActionsTab({ character }: ActionsTabProps) {
           title={activeRoll.title}
           attackBonus={activeRoll.attackBonus}
           damageFormula={activeRoll.damageFormula}
+          isHealing={activeRoll.isHealing}
         />
       )}
     </div>
