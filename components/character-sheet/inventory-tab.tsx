@@ -34,6 +34,7 @@ export function InventoryTab({ character }: InventoryTabProps) {
       id: charItem.itemId || charItem.id,
       slug: charItem.slug || '',
       name: charItem.name || charItem.itemName || 'Item',
+      nameEn: (charItem as any).nameEn || charItem.name || charItem.itemName || 'Item',
       itemCategory: charItem.itemCategory,
       itemType: charItem.itemType || charItem.itemCategory,
       rarity: charItem.rarity || 'Comum',

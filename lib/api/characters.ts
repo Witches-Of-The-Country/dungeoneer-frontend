@@ -155,6 +155,8 @@ export interface CharacterAction {
   description?: string | null;
   usesRemaining?: number | null;
   maxUses?: number | null;
+  currentCharges?: number | null;
+  maxCharges?: number | null;
 }
 
 export interface CharacterResponse {
