@@ -99,9 +99,17 @@ export function InventoryTab({ character }: InventoryTabProps) {
   };
 
   const handleDelete = (item: CharacterItem) => {
-    removeItem.mutate(item.id, {
+    const targetId = item.id || (item as any).characterItemId || item.itemId;
+    if (!targetId) {
+      toast.error('Identificador do item inválido.');
+      return;
+    }
+    removeItem.mutate(targetId, {
       onSuccess: () => {
         toast.success('Item removido do inventário.');
+      },
+      onError: (err: any) => {
+        toast.error(err.message || 'Erro ao remover item.');
       },
     });
   };

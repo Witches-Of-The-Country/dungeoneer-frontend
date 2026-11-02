@@ -42,6 +42,9 @@ const CATEGORIES = [
   { value: 'ARMOR', label: 'Armaduras', icon: Shield },
   { value: 'POTION', label: 'Poções', icon: FlaskConical },
   { value: 'WONDROUS', label: 'Maravilhosos', icon: Sparkles },
+  { value: 'RING', label: 'Anéis', icon: Sparkles },
+  { value: 'SCROLL', label: 'Pergaminhos', icon: Sparkles },
+  { value: 'WAND', label: 'Varinhas / Bastões', icon: Sparkles },
   { value: 'ADVENTURING_GEAR', label: 'Equipamento', icon: ShoppingBag },
 ];
 
@@ -105,18 +108,43 @@ export function ItemCatalogModal({ character, open, onClose }: ItemCatalogModalP
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetchItems({ ruleset: character.ruleset, limit: 100 })
-      .then((res) => {
-        setItems(res.items || []);
-        if (res.items && res.items.length > 0) {
-          setSelectedItem(res.items[0]);
+
+    const paramsRuleset: any = { limit: 100 };
+    if (character.ruleset) paramsRuleset.ruleset = character.ruleset;
+    if (search.trim()) paramsRuleset.q = search.trim();
+
+    const paramsHomebrew: any = { ruleset: 'HOMEBREW', limit: 100 };
+    if (search.trim()) paramsHomebrew.q = search.trim();
+
+    const paramsAll: any = { limit: 100 };
+    if (search.trim()) paramsAll.q = search.trim();
+
+    Promise.all([
+      fetchItems(paramsRuleset).catch(() => ({ items: [] })),
+      fetchItems(paramsHomebrew).catch(() => ({ items: [] })),
+      fetchItems(paramsAll).catch(() => ({ items: [] })),
+    ])
+      .then(([rulesetPage, hbPage, allPage]) => {
+        const seen = new Set<string>();
+        const combined = [
+          ...(hbPage?.items || []),
+          ...(rulesetPage?.items || []),
+          ...(allPage?.items || []),
+        ].filter((it) => {
+          if (!it?.id || seen.has(it.id)) return false;
+          seen.add(it.id);
+          return true;
+        });
+        setItems(combined);
+        if (combined.length > 0 && (!selectedItem || !seen.has(selectedItem.id))) {
+          setSelectedItem(combined[0]);
         }
       })
       .catch(() => {
         toast.error('Erro ao carregar o catálogo de itens.');
       })
       .finally(() => setLoading(false));
-  }, [open, character.ruleset]);
+  }, [open, character.ruleset, search]);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -128,8 +156,14 @@ export function ItemCatalogModal({ character, open, onClose }: ItemCatalogModalP
       const matchCategory =
         selectedCategory === 'ALL' ||
         item.itemCategory === selectedCategory ||
-        (selectedCategory === 'ARMOR' && item.itemCategory === 'ARMOR') ||
-        (selectedCategory === 'ADVENTURING_GEAR' && (item.itemCategory === 'ADVENTURING_GEAR' || item.itemCategory === 'TOOL'));
+        (selectedCategory === 'ARMOR' && (item.itemCategory === 'ARMOR' || item.itemType?.toLowerCase().includes('armadura') || item.itemType?.toLowerCase().includes('escudo'))) ||
+        (selectedCategory === 'WEAPON' && (item.itemCategory === 'WEAPON' || item.itemType?.toLowerCase().includes('arma'))) ||
+        (selectedCategory === 'ADVENTURING_GEAR' && (item.itemCategory === 'ADVENTURING_GEAR' || item.itemCategory === 'EQUIPMENT' || item.itemCategory === 'TOOL' || item.itemType?.toLowerCase().includes('equipamento') || item.itemType?.toLowerCase().includes('ferramenta'))) ||
+        (selectedCategory === 'POTION' && (item.itemCategory === 'POTION' || item.itemCategory === 'CONSUMABLE' || item.itemType?.toLowerCase().includes('poção') || item.itemType?.toLowerCase().includes('potion'))) ||
+        (selectedCategory === 'WONDROUS' && (item.itemCategory === 'WONDROUS' || item.itemType?.toLowerCase().includes('maravilhoso') || item.itemType?.toLowerCase().includes('wondrous'))) ||
+        (selectedCategory === 'RING' && (item.itemCategory === 'RING' || item.itemType?.toLowerCase().includes('anel') || item.itemType?.toLowerCase().includes('ring'))) ||
+        (selectedCategory === 'SCROLL' && (item.itemCategory === 'SCROLL' || item.itemType?.toLowerCase().includes('pergaminho') || item.itemType?.toLowerCase().includes('scroll'))) ||
+        (selectedCategory === 'WAND' && (item.itemCategory === 'WAND' || item.itemCategory === 'ROD' || item.itemCategory === 'STAFF' || item.itemType?.toLowerCase().includes('varinha') || item.itemType?.toLowerCase().includes('bastão') || item.itemType?.toLowerCase().includes('cajado')));
 
       return matchSearch && matchCategory;
     });
@@ -286,6 +320,21 @@ export function ItemCatalogModal({ character, open, onClose }: ItemCatalogModalP
                         {item.attunement && (
                           <Badge className="bg-purple-950/60 text-purple-300 border-purple-700/40 text-[9px] py-0 px-1">
                             Sintonia
+                          </Badge>
+                        )}
+                        {item.ruleset === 'HOMEBREW' && (
+                          <Badge className="bg-emerald-950/60 text-emerald-300 border-emerald-700/40 text-[9px] py-0 px-1">
+                            Homebrew
+                          </Badge>
+                        )}
+                        {item.ruleset === 'SRD_2024' && (
+                          <Badge className="bg-blue-950/60 text-blue-300 border-blue-700/40 text-[9px] py-0 px-1">
+                            2024
+                          </Badge>
+                        )}
+                        {item.ruleset === 'SRD_2014' && (
+                          <Badge className="bg-amber-950/60 text-amber-300 border-amber-700/40 text-[9px] py-0 px-1">
+                            2014
                           </Badge>
                         )}
                       </div>

@@ -143,6 +143,16 @@ export interface CharacterFeat {
   mechanicalEffects?: any;
 }
 
+export interface DamageRollItem {
+  diceCount?: number;
+  diceType?: number;
+  diceFormula?: string;
+  damageType: string;
+  bonusModifier?: number;
+  conditional?: boolean;
+  conditionNote?: string | null;
+}
+
 export interface CharacterAction {
   id?: string;
   name: string;
@@ -150,7 +160,7 @@ export interface CharacterAction {
   category?: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | 'CUSTOM' | string;
   sourceType?: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | 'CUSTOM' | string;
   attackBonus?: number | null;
-  damageRolls?: Array<{ diceCount?: number; diceType?: number; diceFormula?: string; damageType: string; bonusModifier?: number }>;
+  damageRolls?: DamageRollItem[];
   versatileDice?: string | null;
   description?: string | null;
   usesRemaining?: number | null;

@@ -28,12 +28,12 @@ const ITEM_CATEGORIES = [
 
 const ITEM_RARITIES = [
   { value: 'ALL', label: 'Todas as Raridades' },
-  { value: 'Comum', label: 'Comum' },
-  { value: 'Incomum', label: 'Incomum' },
-  { value: 'Raro', label: 'Raro' },
-  { value: 'Muito Raro', label: 'Muito Raro' },
-  { value: 'Lendário', label: 'Lendário' },
-  { value: 'Artefato', label: 'Artefato' },
+  { value: 'COMMON', label: 'Comum' },
+  { value: 'UNCOMMON', label: 'Incomum' },
+  { value: 'RARE', label: 'Raro' },
+  { value: 'VERY_RARE', label: 'Muito Raro' },
+  { value: 'LEGENDARY', label: 'Lendário' },
+  { value: 'ARTIFACT', label: 'Artefato' },
 ];
 
 const RULESETS = [

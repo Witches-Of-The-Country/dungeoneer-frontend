@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   CharacterResponse,
   CharacterAction,
+  DamageRollItem,
   useUpdateCharacter,
   useUseFeat,
 } from '@/lib/api/characters';
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Swords, Dices, Plus, Heart, Sparkles, Shield, X } from 'lucide-react';
-import { DiceRollerModal } from './dice-roller-modal';
+import { DiceRollerModal, DAMAGE_TYPE_LABELS } from './dice-roller-modal';
 import { toast } from 'sonner';
 
 interface ActionsTabProps {
@@ -34,6 +35,8 @@ export function ActionsTab({ character }: ActionsTabProps) {
     title: string;
     attackBonus?: number | null;
     damageFormula?: string;
+    damageRolls?: DamageRollItem[];
+    versatileDice?: string | null;
     isHealing?: boolean;
     actionId?: string;
     category?: string;
@@ -279,6 +282,8 @@ export function ActionsTab({ character }: ActionsTabProps) {
                               title: act.name,
                               attackBonus: effectiveAttackBonus,
                               damageFormula: formula,
+                              damageRolls: act.damageRolls,
+                              versatileDice: act.versatileDice,
                               isHealing: true,
                               actionId: act.id,
                               category: act.category,
@@ -298,6 +303,8 @@ export function ActionsTab({ character }: ActionsTabProps) {
                               title: act.name,
                               attackBonus: effectiveAttackBonus,
                               damageFormula: formula,
+                              damageRolls: act.damageRolls,
+                              versatileDice: act.versatileDice,
                               isHealing: false,
                               actionId: act.id,
                               category: act.category,
@@ -325,13 +332,32 @@ export function ActionsTab({ character }: ActionsTabProps) {
                   )}
 
                   {formula && !healing && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">
-                        {isReckless ? 'Fórmula de Rolagem:' : 'Dano:'}
-                      </span>
-                      <span className="font-mono font-bold text-red-400">
-                        {formula} {act.damageRolls?.[0]?.damageType || ''}
-                      </span>
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-slate-400">
+                          {isReckless ? 'Fórmula de Rolagem:' : 'Dano:'}
+                        </span>
+                        <span className="font-mono font-bold text-red-400">
+                          {act.damageRolls?.[0]?.diceFormula || formula}{' '}
+                          <span className="text-xs text-red-300 font-sans font-normal">
+                            {DAMAGE_TYPE_LABELS[act.damageRolls?.[0]?.damageType || ''] || act.damageRolls?.[0]?.damageType || ''}
+                          </span>
+                        </span>
+                      </div>
+                      {act.damageRolls && act.damageRolls.length > 1 &&
+                        act.damageRolls.slice(1).map((dr, idx) => (
+                          <div key={idx} className="flex justify-between items-baseline text-[11px] text-amber-300/90 pl-2">
+                            <span className="text-slate-400">
+                              + Adicional{dr.conditional ? ' (Condicional)' : ''}:
+                            </span>
+                            <span className="font-mono font-semibold">
+                              +{dr.diceFormula}{' '}
+                              <span className="text-[10px] text-amber-200 font-sans font-normal">
+                                {DAMAGE_TYPE_LABELS[dr.damageType] || dr.damageType}
+                              </span>
+                            </span>
+                          </div>
+                        ))}
                     </div>
                   )}
 
@@ -502,6 +528,8 @@ export function ActionsTab({ character }: ActionsTabProps) {
           title={activeRoll.title}
           attackBonus={activeRoll.attackBonus}
           damageFormula={activeRoll.damageFormula}
+          damageRolls={activeRoll.damageRolls}
+          versatileDice={activeRoll.versatileDice}
           isHealing={activeRoll.isHealing}
           onApplyHealing={handleApplyHealing}
         />
