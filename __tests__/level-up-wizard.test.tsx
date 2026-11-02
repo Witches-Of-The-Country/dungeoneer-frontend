@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { XpProgressBar } from '@/components/character-sheet/xp-progress-bar';
 import { LevelUpWizardModal } from '@/components/character-sheet/level-up-wizard-modal';
@@ -251,5 +251,81 @@ describe('XP Progress Bar & Level Up Wizard Modal logic', () => {
         expect.anything()
       );
     });
+  });
+
+  it('renders rich feat selector with search, category filter, and card selection', async () => {
+    const mockChar: CharacterResponse = {
+      id: 'char-2',
+      name: 'Gimli',
+      level: 3,
+      hitPointsCurrent: 30,
+      hitPointsMax: 30,
+      ruleset: 'SRD_2024',
+      className: 'Guerreiro',
+      lineageName: 'Anão',
+      updatedAt: '2026-11-01T00:00:00Z',
+      archetype: {
+        id: 'arch-fighter',
+        name: 'Guerreiro',
+        hitDice: 'd10',
+        ruleset: 'SRD_2024',
+      },
+      classProgressions: [
+        {
+          id: 'prog-1',
+          characterId: 'char-2',
+          archetypeId: 'arch-fighter',
+          classLevel: 3,
+        },
+      ],
+      classes: [{ className: 'Guerreiro', classLevel: 3 }],
+      abilityScores: {
+        strength: 16,
+        dexterity: 12,
+        constitution: 14,
+        intelligence: 10,
+        wisdom: 12,
+        charisma: 8,
+      },
+    };
+
+    render(
+      <LevelUpWizardModal
+        isOpen={true}
+        onClose={vi.fn()}
+        character={mockChar}
+      />
+    );
+
+    // Step 1: Advance class choice
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Step 2: Advance HP step
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Step 3: Choose Feat
+    const featChoiceBtn = screen.getByTestId('choice-feat-button');
+    fireEvent.click(featChoiceBtn);
+
+    // Search bar is displayed
+    const searchInput = await screen.findByPlaceholderText(/Buscar talento por nome/i);
+    expect(searchInput).toBeInTheDocument();
+
+    // Feat cards are rendered
+    const gwmCard = await screen.findByTestId('feat-card-feat-gwm');
+    expect(gwmCard).toBeInTheDocument();
+    expect(within(gwmCard).getByText('Mestre de Armas Grandes')).toBeInTheDocument();
+
+    // Select the feat via card click
+    fireEvent.click(gwmCard);
+
+    // Verify selection confirmation banner
+    expect(screen.getByText(/Talento Selecionado:/i)).toBeInTheDocument();
+
+    // Advance to Summary (Step 4)
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Summary displays selected feat
+    expect(screen.getByText('Talento: Mestre de Armas Grandes')).toBeInTheDocument();
   });
 });

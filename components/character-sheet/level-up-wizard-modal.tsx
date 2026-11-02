@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   CharacterResponse,
   useLevelUp,
@@ -37,10 +38,14 @@ import {
   Award,
   Wand2,
   ChevronRight,
+  ChevronLeft,
   Check,
   Dices,
   Lock,
   Plus,
+  Search,
+  X,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -81,6 +86,13 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
   // Available selectable Feats (GENERAL + ORIGIN)
   const [selectableFeats, setSelectableFeats] = useState<Feat[]>([]);
   const [selectedFeatId, setSelectedFeatId] = useState<string>('');
+
+  // Feat Search & Filtering for Rich Selector
+  const [featSearch, setFeatSearch] = useState('');
+  const [featTypeFilter, setFeatTypeFilter] = useState<'ALL' | 'ORIGIN' | 'GENERAL' | 'HOMEBREW'>('ALL');
+  const [featPage, setFeatPage] = useState(1);
+  const [detailModalFeat, setDetailModalFeat] = useState<Feat | null>(null);
+  const FEATS_PER_PAGE = 5;
 
   // HP Step (Locked to character.hpCalculationMethod)
   const lockedHpMethod: HpCalculationMethod =
@@ -313,6 +325,29 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
     [selectableFeats, selectedFeatId]
   );
 
+  const filteredFeats = useMemo(() => {
+    return selectableFeats.filter((f) => {
+      if (featTypeFilter === 'ORIGIN' && f.featType !== 'ORIGIN') return false;
+      if (featTypeFilter === 'GENERAL' && f.featType !== 'GENERAL') return false;
+      if (featTypeFilter === 'HOMEBREW' && f.ruleset !== 'HOMEBREW') return false;
+
+      if (featSearch.trim()) {
+        const q = featSearch.toLowerCase();
+        const matchName = f.name?.toLowerCase().includes(q) || f.nameEn?.toLowerCase().includes(q);
+        const matchPrereq = f.prerequisites?.toLowerCase().includes(q);
+        const matchDesc = f.description?.toLowerCase().includes(q);
+        if (!matchName && !matchPrereq && !matchDesc) return false;
+      }
+      return true;
+    });
+  }, [selectableFeats, featTypeFilter, featSearch]);
+
+  const totalFeatPages = Math.max(1, Math.ceil(filteredFeats.length / FEATS_PER_PAGE));
+  const paginatedFeats = useMemo(() => {
+    const start = (featPage - 1) * FEATS_PER_PAGE;
+    return filteredFeats.slice(start, start + FEATS_PER_PAGE);
+  }, [filteredFeats, featPage]);
+
   const getCalculatedHpIncrease = () => {
     const hitDieValue = parseInt(
       (targetClass?.hitDice || character.archetype?.hitDice || 'd8').replace(/\D/g, '') || '8',
@@ -437,7 +472,8 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto bg-surface border-primary/30 text-foreground">
         <DialogHeader>
           <div className="flex items-center gap-2">
@@ -728,40 +764,228 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
               </div>
             ) : (
               <div className="space-y-3 pt-1">
-                <Label>Selecione um Talento (Geral / Origem)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-foreground">
+                    Selecione um Talento (Geral / Origem)
+                  </Label>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {filteredFeats.length} {filteredFeats.length === 1 ? 'talento encontrado' : 'talentos encontrados'}
+                  </span>
+                </div>
+
                 {selectableFeats.length > 0 ? (
-                  <>
+                  <div className="space-y-3">
+                    {/* Hidden sync select for accessibility & automated tests */}
                     <select
                       data-testid="levelup-feat-select"
                       value={selectedFeatId}
                       onChange={(e) => setSelectedFeatId(e.target.value)}
-                      className="w-full h-10 px-3 py-2 rounded-md border border-amber-500/40 bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-label="Seleção rápida de talento"
                     >
+                      <option value="">Selecione um Talento...</option>
                       {selectableFeats.map((f) => (
                         <option key={f.id} value={f.id}>
                           {f.name}
-                          {f.ruleset === 'HOMEBREW' ? ' [Homebrew]' : ''}
                         </option>
                       ))}
                     </select>
-                    {selectedFeatObject && (
-                      <div className="p-3.5 rounded-lg border border-primary/20 bg-background/60 space-y-2 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-amber-300 text-sm">
-                            {selectedFeatObject.name}
-                          </span>
-                          {selectedFeatObject.prerequisites && (
-                            <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono">
-                              Pré-requisito: {selectedFeatObject.prerequisites}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-muted-foreground leading-relaxed">
-                          {selectedFeatObject.description}
-                        </p>
+
+                    {/* Search bar & Type filter chips */}
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={featSearch}
+                          onChange={(e) => {
+                            setFeatSearch(e.target.value);
+                            setFeatPage(1);
+                          }}
+                          placeholder="Buscar talento por nome, pré-requisito..."
+                          className="w-full h-9 pl-9 pr-8 rounded-lg border border-primary/20 bg-background/60 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        {featSearch && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFeatSearch('');
+                              setFeatPage(1);
+                            }}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Filter Chips */}
+                      <div className="flex gap-1.5 flex-wrap text-xs">
+                        {[
+                          { key: 'ALL', label: 'Todos' },
+                          { key: 'GENERAL', label: 'Gerais' },
+                          { key: 'ORIGIN', label: 'Origem' },
+                          { key: 'HOMEBREW', label: 'Homebrew' },
+                        ].map((chip) => (
+                          <button
+                            key={chip.key}
+                            type="button"
+                            onClick={() => {
+                              setFeatTypeFilter(chip.key as any);
+                              setFeatPage(1);
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                              featTypeFilter === chip.key
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                : 'bg-background/40 text-muted-foreground border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Feat Cards List */}
+                    {paginatedFeats.length > 0 ? (
+                      <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                        {paginatedFeats.map((f) => {
+                          const isSelected = selectedFeatId === f.id;
+                          return (
+                            <div
+                              key={f.id}
+                              data-testid={`feat-card-${f.id}`}
+                              onClick={() => setSelectedFeatId(f.id)}
+                              className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                                isSelected
+                                  ? 'border-amber-500/70 bg-amber-950/20 shadow-sm ring-1 ring-amber-500/30'
+                                  : 'border-primary/20 bg-background/50 hover:border-primary/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`font-bold ${isSelected ? 'text-amber-300' : 'text-foreground'}`}>
+                                      {f.name}
+                                    </span>
+                                    {f.nameEn && f.nameEn !== f.name && (
+                                      <span className="text-[10px] text-muted-foreground italic">
+                                        ({f.nameEn})
+                                      </span>
+                                    )}
+                                    <Badge variant="outline" className="text-[9px] py-0 px-1 border-primary/30">
+                                      {f.featType || 'GERAL'}
+                                    </Badge>
+                                    {f.ruleset === 'HOMEBREW' && (
+                                      <Badge variant="secondary" className="text-[9px] py-0 px-1 bg-purple-950/50 text-purple-300 border-purple-700/40">
+                                        Homebrew
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {f.prerequisites && (
+                                    <span className="inline-block text-[10px] text-amber-400/90 font-mono">
+                                      Pré-requisito: {f.prerequisites}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setDetailModalFeat(f)}
+                                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                    Detalhes
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => setSelectedFeatId(f.id)}
+                                    className={`h-7 px-2.5 text-[11px] font-semibold gap-1 ${
+                                      isSelected
+                                        ? 'bg-amber-600 hover:bg-amber-500 text-zinc-950'
+                                        : 'bg-primary/20 hover:bg-primary/30 border border-primary/30 text-foreground'
+                                    }`}
+                                  >
+                                    {isSelected ? (
+                                      <>
+                                        <Check className="w-3 h-3" />
+                                        Selecionado
+                                      </>
+                                    ) : (
+                                      'Selecionar'
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                              <p className="text-muted-foreground line-clamp-2 mt-1.5 leading-relaxed">
+                                {f.description}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-lg border border-dashed border-slate-800 text-center text-xs text-muted-foreground">
+                        Nenhum talento encontrado com os filtros atuais.
                       </div>
                     )}
-                  </>
+
+                    {/* Pagination Controls */}
+                    {totalFeatPages > 1 && (
+                      <div className="flex items-center justify-between text-xs pt-1 px-1">
+                        <span className="text-muted-foreground font-mono text-[11px]">
+                          Página {featPage} de {totalFeatPages}
+                        </span>
+                        <div className="flex gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={featPage <= 1}
+                            onClick={() => setFeatPage((p) => Math.max(1, p - 1))}
+                            className="h-7 px-2 text-xs border-primary/20 text-foreground disabled:opacity-40"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5 mr-0.5" />
+                            Anterior
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={featPage >= totalFeatPages}
+                            onClick={() => setFeatPage((p) => Math.min(totalFeatPages, p + 1))}
+                            className="h-7 px-2 text-xs border-primary/20 text-foreground disabled:opacity-40"
+                          >
+                            Próxima
+                            <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Active Selection Summary */}
+                    {selectedFeatObject && (
+                      <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-950/20 flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                          <div>
+                            <span className="text-muted-foreground">Talento Selecionado: </span>
+                            <span className="font-bold text-amber-300">{selectedFeatObject.name}</span>
+                          </div>
+                        </div>
+                        {selectedFeatObject.prerequisites && (
+                          <span className="text-[10px] text-amber-400 font-mono hidden sm:inline">
+                            Req: {selectedFeatObject.prerequisites}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <p className="text-xs text-muted-foreground italic">
                     Nenhum talento elegível disponível no catálogo.
@@ -840,5 +1064,73 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Detail Dialog for Feats */}
+    <Dialog open={!!detailModalFeat} onOpenChange={(o) => !o && setDetailModalFeat(null)}>
+      <DialogContent className="max-w-md bg-surface border border-primary/30 text-foreground">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <Award className="w-5 h-5 text-amber-400" />
+            <DialogTitle className="text-base font-bold text-primary">
+              {detailModalFeat?.name}
+            </DialogTitle>
+          </div>
+          {detailModalFeat?.nameEn && detailModalFeat.nameEn !== detailModalFeat.name && (
+            <DialogDescription className="text-xs text-muted-foreground italic">
+              {detailModalFeat.nameEn}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+
+        <div className="space-y-3 py-2 text-xs">
+          <div className="flex gap-2 flex-wrap">
+            <Badge variant="outline" className="border-primary/30">
+              {detailModalFeat?.featType || 'GERAL'}
+            </Badge>
+            <Badge variant="secondary">
+              {detailModalFeat?.ruleset || 'SRD'}
+            </Badge>
+          </div>
+
+          {detailModalFeat?.prerequisites && (
+            <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/20 text-amber-300">
+              <span className="font-semibold font-mono">Pré-requisito: </span>
+              {detailModalFeat.prerequisites}
+            </div>
+          )}
+
+          <div className="p-3 rounded-lg border border-primary/20 bg-background/50 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-400">Descrição do Talento:</span>
+            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              {detailModalFeat?.description}
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDetailModalFeat(null)}
+              className="border-primary/20"
+            >
+              Fechar
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (detailModalFeat) {
+                  setSelectedFeatId(detailModalFeat.id);
+                }
+                setDetailModalFeat(null);
+              }}
+              className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold"
+            >
+              Selecionar este Talento
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
