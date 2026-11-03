@@ -177,12 +177,27 @@ export function FeatDetailModal({ feat, open, onClose, onEdit }: FeatDetailModal
               )}
 
               {feat.maxCharges && feat.maxCharges > 0 && (
-                <div className="flex items-center gap-2 text-xs text-slate-300 pt-1">
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  Cargas Disponíveis:{' '}
-                  <span className="font-mono font-bold text-amber-300">
-                    {feat.currentCharges ?? feat.maxCharges} / {feat.maxCharges}
-                  </span>
+                <div className="space-y-1 pt-1 border-t border-slate-800 text-xs text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    Cargas Disponíveis:{' '}
+                    <span className="font-mono font-bold text-amber-300">
+                      {feat.currentCharges ?? feat.maxCharges} / {feat.maxCharges}
+                    </span>
+                  </div>
+                  {(effects?.shortRestRecoveryType || effects?.longRestRecoveryType || effects?.maxChargesType) && (
+                    <div className="flex flex-wrap gap-2 text-[11px] text-slate-400 pl-5">
+                      {effects?.maxChargesType && effects.maxChargesType !== 'FIXED' && (
+                        <span>Fórmula: <strong className="text-amber-200">{effects.maxChargesType}</strong></span>
+                      )}
+                      {effects?.shortRestRecoveryType && effects.shortRestRecoveryType !== 'NONE' && (
+                        <span>Descanso Curto: <strong className="text-sky-300">{effects.shortRestRecoveryType === 'ALL' ? 'Total' : effects.shortRestRecoveryType}</strong></span>
+                      )}
+                      {effects?.longRestRecoveryType && (
+                        <span>Descanso Longo: <strong className="text-indigo-300">{effects.longRestRecoveryType === 'ALL' ? 'Total' : effects.longRestRecoveryType}</strong></span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

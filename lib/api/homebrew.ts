@@ -28,6 +28,9 @@ export interface FeatPrerequisitePayload {
   displayLabel: string;
 }
 
+export type ChargeType = 'FIXED' | 'ABILITY_MODIFIER' | 'PROFICIENCY' | 'LEVEL';
+export type ChargeRecoveryType = 'NONE' | 'ALL' | 'FIXED' | 'MODIFIER' | 'PROFICIENCY' | 'LEVEL';
+
 export interface MechanicalEffectsPayload {
   abilityBonuses?: Record<string, number>;
   abilityBonusChoice?: AbilityBonusChoicePayload;
@@ -42,6 +45,13 @@ export interface MechanicalEffectsPayload {
   actionDescription?: string;
   maxUses?: number;
   rechargeOn?: 'SHORT_REST' | 'LONG_REST' | 'NONE' | string;
+  maxChargesType?: ChargeType;
+  chargeAbility?: string;
+  fixedMaxCharges?: number;
+  shortRestRecoveryType?: ChargeRecoveryType;
+  shortRestRecoveryFixed?: number;
+  longRestRecoveryType?: ChargeRecoveryType;
+  longRestRecoveryFixed?: number;
   conditional?: boolean;
   conditionDescription?: string;
   prerequisiteRules?: FeatPrerequisitePayload[];

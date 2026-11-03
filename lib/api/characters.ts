@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './client';
 import { translateReferenceName } from '@/lib/srd-translations';
+import { ChargeType, ChargeRecoveryType } from './encyclopedia';
 
 export type Ruleset = 'SRD_2014' | 'SRD_2024' | 'HOMEBREW';
 export type AbilityScoreMethod = 'STANDARD_ARRAY' | 'POINT_BUY' | 'ROLLED';
@@ -139,6 +140,12 @@ export interface CharacterFeat {
   unlockedAtLevel: number;
   currentCharges?: number | null;
   maxCharges?: number | null;
+  maxChargesType?: ChargeType | null;
+  chargeAbility?: string | null;
+  shortRestRecoveryType?: ChargeRecoveryType | null;
+  shortRestRecoveryFixed?: number | null;
+  longRestRecoveryType?: ChargeRecoveryType | null;
+  longRestRecoveryFixed?: number | null;
   source: string;
   mechanicalEffects?: any;
 }

@@ -25,6 +25,8 @@ import {
   useUpdateHomebrewSubclass,
   useUpdateHomebrewLineage,
   HomebrewProgressionFeatPayload,
+  ChargeType,
+  ChargeRecoveryType,
 } from '@/lib/api/homebrew';
 import { useReferenceClasses } from '@/lib/api/characters';
 import { fetchFeats, Feat } from '@/lib/api/encyclopedia';
@@ -200,6 +202,28 @@ export function CreateHomebrewDialog({
       if (editEntity.hitDice) setHitDice(editEntity.hitDice);
       if (editEntity.primaryAbility) setPrimaryAbility(editEntity.primaryAbility);
       if (editEntity.subclassLevel) setSubclassLevel(editEntity.subclassLevel);
+
+      const featMechanics = editEntity.mechanicalEffects;
+      if (featMechanics) {
+        if (featMechanics.acBonus !== undefined) setFeatAcBonus(featMechanics.acBonus);
+        if (featMechanics.initiativeBonus !== undefined) setFeatInitBonus(featMechanics.initiativeBonus);
+        if (featMechanics.speedBonus !== undefined) setFeatSpeedBonus(featMechanics.speedBonus);
+        if (featMechanics.hpPerLevelBonus !== undefined) setFeatHpPerLevelBonus(featMechanics.hpPerLevelBonus);
+        if (featMechanics.conditional !== undefined) setFeatIsConditional(featMechanics.conditional);
+        if (featMechanics.conditionDescription) setFeatConditionDesc(featMechanics.conditionDescription);
+        if (featMechanics.grantsAction !== undefined) setFeatGrantsAction(featMechanics.grantsAction);
+        if (featMechanics.actionType) setFeatActionType(featMechanics.actionType);
+        if (featMechanics.maxChargesType || featMechanics.fixedMaxCharges || featMechanics.maxUses || editEntity.maxCharges) {
+          setFeatHasCharges(true);
+          setFeatMaxChargesType(featMechanics.maxChargesType || 'FIXED');
+          setFeatChargeAbility(featMechanics.chargeAbility || 'STRENGTH');
+          setFeatFixedMaxCharges(featMechanics.fixedMaxCharges ?? featMechanics.maxUses ?? editEntity.maxCharges ?? 1);
+          setFeatShortRestRecoveryType(featMechanics.shortRestRecoveryType || (featMechanics.rechargeOn === 'SHORT_REST' ? 'ALL' : 'NONE'));
+          setFeatShortRestRecoveryFixed(featMechanics.shortRestRecoveryFixed || 1);
+          setFeatLongRestRecoveryType(featMechanics.longRestRecoveryType || 'ALL');
+          setFeatLongRestRecoveryFixed(featMechanics.longRestRecoveryFixed || 1);
+        }
+      }
     }
   }, [category, open, editEntity]);
 
@@ -245,6 +269,14 @@ export function CreateHomebrewDialog({
   const [featActionType, setFeatActionType] = useState<string>('ACTION');
   const [featMaxUses, setFeatMaxUses] = useState<number>(1);
   const [featRechargeOn, setFeatRechargeOn] = useState<string>('LONG_REST');
+  const [featHasCharges, setFeatHasCharges] = useState<boolean>(false);
+  const [featMaxChargesType, setFeatMaxChargesType] = useState<ChargeType>('FIXED');
+  const [featChargeAbility, setFeatChargeAbility] = useState<string>('STRENGTH');
+  const [featFixedMaxCharges, setFeatFixedMaxCharges] = useState<number>(1);
+  const [featShortRestRecoveryType, setFeatShortRestRecoveryType] = useState<ChargeRecoveryType>('NONE');
+  const [featShortRestRecoveryFixed, setFeatShortRestRecoveryFixed] = useState<number>(1);
+  const [featLongRestRecoveryType, setFeatLongRestRecoveryType] = useState<ChargeRecoveryType>('ALL');
+  const [featLongRestRecoveryFixed, setFeatLongRestRecoveryFixed] = useState<number>(1);
 
   // Items
   const [itemCategory, setItemCategory] = useState('WEAPON');
@@ -628,6 +660,7 @@ export function CreateHomebrewDialog({
           featSpeedBonus !== 0 ||
           featHpPerLevelBonus !== 0 ||
           featGrantsAction ||
+          featHasCharges ||
           featIsConditional ||
           featPrerequisiteRules.length > 0;
 
@@ -651,12 +684,19 @@ export function CreateHomebrewDialog({
                 initiativeBonus: featInitBonus || undefined,
                 speedBonus: featSpeedBonus || undefined,
                 hpPerLevelBonus: featHpPerLevelBonus || undefined,
-                grantsAction: featGrantsAction || undefined,
+                grantsAction: (featGrantsAction || featHasCharges) || undefined,
                 actionType: featGrantsAction ? featActionType : undefined,
-                actionName: featGrantsAction ? name.trim() : undefined,
-                actionDescription: featGrantsAction ? description.trim() : undefined,
-                maxUses: featGrantsAction ? featMaxUses : undefined,
-                rechargeOn: featGrantsAction ? featRechargeOn : undefined,
+                actionName: (featGrantsAction || featHasCharges) ? name.trim() : undefined,
+                actionDescription: (featGrantsAction || featHasCharges) ? description.trim() : undefined,
+                maxUses: featHasCharges ? (featMaxChargesType === 'FIXED' ? featFixedMaxCharges : 1) : featGrantsAction ? featMaxUses : undefined,
+                rechargeOn: featHasCharges ? (featShortRestRecoveryType !== 'NONE' ? 'SHORT_REST' : featLongRestRecoveryType !== 'NONE' ? 'LONG_REST' : 'NONE') : featGrantsAction ? featRechargeOn : undefined,
+                maxChargesType: featHasCharges ? featMaxChargesType : undefined,
+                chargeAbility: featHasCharges && featMaxChargesType === 'ABILITY_MODIFIER' ? featChargeAbility : undefined,
+                fixedMaxCharges: featHasCharges && featMaxChargesType === 'FIXED' ? featFixedMaxCharges : undefined,
+                shortRestRecoveryType: featHasCharges ? featShortRestRecoveryType : undefined,
+                shortRestRecoveryFixed: featHasCharges && featShortRestRecoveryType === 'FIXED' ? featShortRestRecoveryFixed : undefined,
+                longRestRecoveryType: featHasCharges ? featLongRestRecoveryType : undefined,
+                longRestRecoveryFixed: featHasCharges && featLongRestRecoveryType === 'FIXED' ? featLongRestRecoveryFixed : undefined,
                 conditional: featIsConditional || undefined,
                 conditionDescription: featIsConditional ? featConditionDesc.trim() || undefined : undefined,
                 prerequisiteRules: featPrerequisiteRules.length > 0 ? featPrerequisiteRules : undefined,
@@ -1543,7 +1583,7 @@ export function CreateHomebrewDialog({
                     </div>
                     <div>
                       <label className="block text-[11px] text-slate-400 mb-1">
-                        PV por Nível (Ex: Durão +2)
+                        PV por Nível
                       </label>
                       <input
                         type="number"
@@ -1565,7 +1605,7 @@ export function CreateHomebrewDialog({
                     </div>
                     <div>
                       <label className="block text-[11px] text-slate-400 mb-1">
-                        Bônus Deslocamento (pés)
+                        Bônus Desloc. (pés)
                       </label>
                       <input
                         type="number"
@@ -1606,7 +1646,7 @@ export function CreateHomebrewDialog({
                         onChange={(e) => setFeatGrantsAction(e.target.checked)}
                         className="rounded border-slate-700 bg-slate-950 text-amber-500"
                       />
-                      Concede Ação Ativa ou Cargas de Uso na Ficha
+                      Concede Ação Ativa na Ficha
                     </label>
 
                     {featGrantsAction && (
@@ -1651,6 +1691,148 @@ export function CreateHomebrewDialog({
                             <option value="LONG_REST">Descanso Longo</option>
                             <option value="NONE">Sem Recarga</option>
                           </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sistema de Cargas e Recargas por Descanso */}
+                  <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        data-testid="feat-has-charges-toggle"
+                        checked={featHasCharges}
+                        onChange={(e) => setFeatHasCharges(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-950 text-amber-500"
+                      />
+                      Habilitar Sistema de Cargas e Descanso
+                    </label>
+
+                    {featHasCharges && (
+                      <div className="bg-slate-950/70 border border-amber-900/40 rounded-md p-3 space-y-3 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">
+                              Fórmula do Máximo de Cargas
+                            </label>
+                            <select
+                              data-testid="feat-max-charges-type-select"
+                              value={featMaxChargesType}
+                              onChange={(e) => setFeatMaxChargesType(e.target.value as ChargeType)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-amber-50"
+                            >
+                              <option value="FIXED">Número Fixo</option>
+                              <option value="ABILITY_MODIFIER">Modificador de Atributo (mín. 1)</option>
+                              <option value="PROFICIENCY">Bônus de Proficiência</option>
+                              <option value="LEVEL">Nível do Personagem</option>
+                            </select>
+                          </div>
+
+                          {featMaxChargesType === 'FIXED' && (
+                            <div>
+                              <label className="block text-[11px] text-slate-400 mb-1">
+                                Quantidade Fixa de Cargas
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={99}
+                                data-testid="feat-fixed-max-charges-input"
+                                value={featFixedMaxCharges}
+                                onChange={(e) => setFeatFixedMaxCharges(Math.max(1, Number(e.target.value) || 1))}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-amber-50"
+                              />
+                            </div>
+                          )}
+
+                          {featMaxChargesType === 'ABILITY_MODIFIER' && (
+                            <div>
+                              <label className="block text-[11px] text-slate-400 mb-1">
+                                Atributo Vinculado
+                              </label>
+                              <select
+                                data-testid="feat-charge-ability-select"
+                                value={featChargeAbility}
+                                onChange={(e) => setFeatChargeAbility(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-amber-50"
+                              >
+                                <option value="STRENGTH">Força (FOR)</option>
+                                <option value="DEXTERITY">Destreza (DES)</option>
+                                <option value="CONSTITUTION">Constituição (CON)</option>
+                                <option value="INTELLIGENCE">Inteligência (INT)</option>
+                                <option value="WISDOM">Sabedoria (SAB)</option>
+                                <option value="CHARISMA">Carisma (CAR)</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Recovery Rules */}
+                        <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Short Rest Recovery */}
+                          <div className="space-y-1.5">
+                            <label className="block text-[11px] font-medium text-amber-200">
+                              Recuperação no Descanso Curto
+                            </label>
+                            <select
+                              data-testid="feat-short-rest-recovery-select"
+                              value={featShortRestRecoveryType}
+                              onChange={(e) => setFeatShortRestRecoveryType(e.target.value as ChargeRecoveryType)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-amber-50"
+                            >
+                              <option value="NONE">Nenhuma (Não recupera)</option>
+                              <option value="ALL">Todas as Cargas (Total)</option>
+                              <option value="FIXED">Quantidade Fixa</option>
+                              <option value="MODIFIER">Modificador do Atributo</option>
+                              <option value="PROFICIENCY">Bônus de Proficiência</option>
+                              <option value="LEVEL">Nível do Personagem</option>
+                            </select>
+                            {featShortRestRecoveryType === 'FIXED' && (
+                              <input
+                                type="number"
+                                min={1}
+                                max={99}
+                                placeholder="Qtd. Fixa"
+                                data-testid="feat-short-rest-recovery-fixed-input"
+                                value={featShortRestRecoveryFixed}
+                                onChange={(e) => setFeatShortRestRecoveryFixed(Math.max(1, Number(e.target.value) || 1))}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-amber-50 mt-1"
+                              />
+                            )}
+                          </div>
+
+                          {/* Long Rest Recovery */}
+                          <div className="space-y-1.5">
+                            <label className="block text-[11px] font-medium text-amber-200">
+                              Recuperação no Descanso Longo
+                            </label>
+                            <select
+                              data-testid="feat-long-rest-recovery-select"
+                              value={featLongRestRecoveryType}
+                              onChange={(e) => setFeatLongRestRecoveryType(e.target.value as ChargeRecoveryType)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-amber-50"
+                            >
+                              <option value="ALL">Todas as Cargas (Total - Padrão)</option>
+                              <option value="NONE">Nenhuma</option>
+                              <option value="FIXED">Quantidade Fixa</option>
+                              <option value="MODIFIER">Modificador do Atributo</option>
+                              <option value="PROFICIENCY">Bônus de Proficiência</option>
+                              <option value="LEVEL">Nível do Personagem</option>
+                            </select>
+                            {featLongRestRecoveryType === 'FIXED' && (
+                              <input
+                                type="number"
+                                min={1}
+                                max={99}
+                                placeholder="Qtd. Fixa"
+                                data-testid="feat-long-rest-recovery-fixed-input"
+                                value={featLongRestRecoveryFixed}
+                                onChange={(e) => setFeatLongRestRecoveryFixed(Math.max(1, Number(e.target.value) || 1))}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-amber-50 mt-1"
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

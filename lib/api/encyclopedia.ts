@@ -30,6 +30,9 @@ export interface AbilityBonusChoice {
   bonusAmount: number;
 }
 
+export type ChargeType = 'FIXED' | 'ABILITY_MODIFIER' | 'PROFICIENCY' | 'LEVEL';
+export type ChargeRecoveryType = 'NONE' | 'ALL' | 'FIXED' | 'MODIFIER' | 'PROFICIENCY' | 'LEVEL';
+
 export interface Feat {
   id: string;
   ruleset: string;
@@ -64,6 +67,13 @@ export interface Feat {
     diceFormula?: string;
     usesPerRest?: number;
     restType?: string;
+    maxChargesType?: ChargeType;
+    chargeAbility?: string;
+    fixedMaxCharges?: number;
+    shortRestRecoveryType?: ChargeRecoveryType;
+    shortRestRecoveryFixed?: number;
+    longRestRecoveryType?: ChargeRecoveryType;
+    longRestRecoveryFixed?: number;
     conditional?: boolean;
     conditionDescription?: string;
   } | null;

@@ -46,6 +46,34 @@ export function FeatsTab({ character }: FeatsTabProps) {
     return feat.source || 'Classe';
   };
 
+  const getRecoveryLabel = (type?: string | null, fixed?: number | null) => {
+    if (!type || type === 'NONE') return null;
+    if (type === 'ALL') return 'Total';
+    if (type === 'FIXED') return `+${fixed || 1}`;
+    if (type === 'MODIFIER') return 'Mod.';
+    if (type === 'PROFICIENCY') return 'Prof.';
+    if (type === 'LEVEL') return 'Nível';
+    return type;
+  };
+
+  const getMaxChargesFormulaLabel = (type?: string | null, ability?: string | null) => {
+    if (!type || type === 'FIXED') return null;
+    if (type === 'ABILITY_MODIFIER') {
+      const abMap: Record<string, string> = {
+        STRENGTH: 'FOR',
+        DEXTERITY: 'DES',
+        CONSTITUTION: 'CON',
+        INTELLIGENCE: 'INT',
+        WISDOM: 'SAB',
+        CHARISMA: 'CAR',
+      };
+      return abMap[ability || ''] ? `Mod. ${abMap[ability || '']}` : 'Mod.';
+    }
+    if (type === 'PROFICIENCY') return 'Proficiência';
+    if (type === 'LEVEL') return 'Nível';
+    return null;
+  };
+
   return (
     <div className="space-y-4">
       {feats.length === 0 ? (
@@ -58,6 +86,17 @@ export function FeatsTab({ character }: FeatsTabProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {feats.map((feat) => {
             const hasCharges = feat.maxCharges !== null && feat.maxCharges !== undefined && feat.maxCharges > 0;
+            const shortRecovery = feat.shortRestRecoveryType ?? feat.mechanicalEffects?.shortRestRecoveryType;
+            const shortFixed = feat.shortRestRecoveryFixed ?? feat.mechanicalEffects?.shortRestRecoveryFixed;
+            const longRecovery = feat.longRestRecoveryType ?? feat.mechanicalEffects?.longRestRecoveryType ?? (feat.mechanicalEffects?.rechargeOn === 'SHORT_REST' ? undefined : 'ALL');
+            const longFixed = feat.longRestRecoveryFixed ?? feat.mechanicalEffects?.longRestRecoveryFixed;
+            const maxFormula = feat.maxChargesType ?? feat.mechanicalEffects?.maxChargesType;
+            const chargeAbility = feat.chargeAbility ?? feat.mechanicalEffects?.chargeAbility;
+
+            const shortLabel = getRecoveryLabel(shortRecovery, shortFixed);
+            const longLabel = getRecoveryLabel(longRecovery, longFixed);
+            const formulaLabel = getMaxChargesFormulaLabel(maxFormula, chargeAbility);
+
             return (
               <Card
                 key={feat.id}
@@ -107,10 +146,29 @@ export function FeatsTab({ character }: FeatsTabProps) {
                   </div>
                 </CardHeader>
 
-                <CardContent className="p-4 pt-2">
+                <CardContent className="p-4 pt-2 space-y-2">
                   <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                     {feat.description || 'Clique para ver os detalhes completos deste talento.'}
                   </p>
+                  {hasCharges && (shortLabel || longLabel || formulaLabel) && (
+                    <div className="flex gap-1.5 pt-1 border-t border-slate-800/60 flex-wrap items-center text-[10px]">
+                      {formulaLabel && (
+                        <span className="text-slate-400 font-mono">
+                          Fórmula: <span className="text-amber-300 font-medium">{formulaLabel}</span>
+                        </span>
+                      )}
+                      {shortLabel && (
+                        <Badge variant="outline" className="text-[9px] border-sky-800/50 bg-sky-950/40 text-sky-300 px-1.5 py-0">
+                          Descanso Curto: {shortLabel}
+                        </Badge>
+                      )}
+                      {longLabel && (
+                        <Badge variant="outline" className="text-[9px] border-indigo-800/50 bg-indigo-950/40 text-indigo-300 px-1.5 py-0">
+                          Descanso Longo: {longLabel}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

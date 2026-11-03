@@ -313,6 +313,114 @@ describe('Homebrew UI & Role Gating Integration Tests', () => {
     });
   });
 
+  it('TP-04: submits a Feat with configurable charges (ABILITY_MODIFIER) and independent rest recovery rules', async () => {
+    mockUseAuth.mockReturnValue({
+      isDM: true,
+      user: { id: 'dm-user-1', roles: ['DUNGEON_MASTER'] },
+      token: 'jwt-token-dm',
+    });
+    mockFeatMutateAsync.mockResolvedValueOnce({ id: 'divine-feat-id' });
+
+    renderWithQueryClient(<SpellsPage />);
+    fireEvent.click(screen.getByTestId('create-homebrew-button'));
+    fireEvent.click(screen.getByTestId('homebrew-tab-feats'));
+
+    fireEvent.change(screen.getByPlaceholderText('Ex: Raio Purpúreo'), {
+      target: { value: 'Fúria Divina' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Insira detalhes e mecânicas...'), {
+      target: { value: 'Cargas baseadas em Sabedoria.' },
+    });
+
+    // Toggle charge system
+    fireEvent.click(screen.getByTestId('feat-has-charges-toggle'));
+
+    // Configure max charges formula = ABILITY_MODIFIER, ability = WISDOM
+    fireEvent.change(screen.getByTestId('feat-max-charges-type-select'), {
+      target: { value: 'ABILITY_MODIFIER' },
+    });
+    fireEvent.change(screen.getByTestId('feat-charge-ability-select'), {
+      target: { value: 'WISDOM' },
+    });
+
+    // Configure short rest recovery = MODIFIER
+    fireEvent.change(screen.getByTestId('feat-short-rest-recovery-select'), {
+      target: { value: 'MODIFIER' },
+    });
+
+    // Long rest recovery should default to ALL
+    expect((screen.getByTestId('feat-long-rest-recovery-select') as HTMLSelectElement).value).toBe('ALL');
+
+    fireEvent.click(screen.getByText('Salvar Homebrew'));
+
+    await waitFor(() => {
+      expect(mockFeatMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Fúria Divina',
+          mechanicalEffects: expect.objectContaining({
+            maxChargesType: 'ABILITY_MODIFIER',
+            chargeAbility: 'WISDOM',
+            shortRestRecoveryType: 'MODIFIER',
+            longRestRecoveryType: 'ALL',
+          }),
+        })
+      );
+    });
+  });
+
+  it('TP-04 (Fixed): submits a Feat with fixed charges and fixed recovery amount', async () => {
+    mockUseAuth.mockReturnValue({
+      isDM: true,
+      user: { id: 'dm-user-1', roles: ['DUNGEON_MASTER'] },
+      token: 'jwt-token-dm',
+    });
+    mockFeatMutateAsync.mockResolvedValueOnce({ id: 'fixed-feat-id' });
+
+    renderWithQueryClient(<SpellsPage />);
+    fireEvent.click(screen.getByTestId('create-homebrew-button'));
+    fireEvent.click(screen.getByTestId('homebrew-tab-feats'));
+
+    fireEvent.change(screen.getByPlaceholderText('Ex: Raio Purpúreo'), {
+      target: { value: 'Lâmina Espiritual' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Insira detalhes e mecânicas...'), {
+      target: { value: '3 cargas por dia, recupera 1 no descanso curto.' },
+    });
+
+    // Toggle charge system
+    fireEvent.click(screen.getByTestId('feat-has-charges-toggle'));
+
+    // Fixed max charges = 3
+    fireEvent.change(screen.getByTestId('feat-fixed-max-charges-input'), {
+      target: { value: '3' },
+    });
+
+    // Short rest recovery = FIXED 1
+    fireEvent.change(screen.getByTestId('feat-short-rest-recovery-select'), {
+      target: { value: 'FIXED' },
+    });
+    fireEvent.change(screen.getByTestId('feat-short-rest-recovery-fixed-input'), {
+      target: { value: '1' },
+    });
+
+    fireEvent.click(screen.getByText('Salvar Homebrew'));
+
+    await waitFor(() => {
+      expect(mockFeatMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Lâmina Espiritual',
+          mechanicalEffects: expect.objectContaining({
+            maxChargesType: 'FIXED',
+            fixedMaxCharges: 3,
+            shortRestRecoveryType: 'FIXED',
+            shortRestRecoveryFixed: 1,
+            longRestRecoveryType: 'ALL',
+          }),
+        })
+      );
+    });
+  });
+
   it('submits a Class with saving throw chips and spellPreparationType', async () => {
     mockUseAuth.mockReturnValue({
       isDM: true,
