@@ -90,12 +90,16 @@ export interface CommonFilters {
 
 export interface SpellFilters extends CommonFilters {
   level?: number;
+  levels?: number[];
   school?: string;
+  schools?: string[];
 }
 
 export interface ItemFilters extends CommonFilters {
   category?: string;
+  categories?: string[];
   rarity?: string;
+  rarities?: string[];
 }
 
 export interface FeatFilters extends CommonFilters {

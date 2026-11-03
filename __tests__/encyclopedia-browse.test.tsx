@@ -10,6 +10,8 @@ import { SpellDetailModal } from '@/components/encyclopedia/spell-detail-modal';
 import { ItemDetailModal } from '@/components/encyclopedia/item-detail-modal';
 import { LineageDetailModal } from '@/components/encyclopedia/lineage-detail-modal';
 import FeatsPage from '@/app/encyclopedia/feats/page';
+import SpellsPage from '@/app/encyclopedia/spells/page';
+import ItemsPage from '@/app/encyclopedia/items/page';
 
 vi.mock('@/lib/hooks/use-auth', () => ({
   useAuth: () => ({ isDM: false, user: null }),
@@ -162,6 +164,62 @@ describe('Encyclopedia UI Components', () => {
     fireEvent.click(generalChip);
     fireEvent.click(screen.getByText('Limpar tipos'));
     expect(screen.queryByText('Limpar tipos')).toBeNull();
+  });
+
+  it('renders SpellsPage with multi-select circle and school chips and allows toggling', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SpellsPage />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText('Grimório de Magias')).toBeInTheDocument();
+    const cantripChip = screen.getByTestId('filter-spell-level-0');
+    const level1Chip = screen.getByTestId('filter-spell-level-1');
+    const evocationChip = screen.getByTestId('filter-spell-school-evocação');
+
+    expect(cantripChip).toBeInTheDocument();
+    expect(level1Chip).toBeInTheDocument();
+    expect(evocationChip).toBeInTheDocument();
+
+    fireEvent.click(cantripChip);
+    expect(screen.getByText('Limpar círculos')).toBeInTheDocument();
+
+    fireEvent.click(evocationChip);
+    expect(screen.getByText('Limpar escolas')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Limpar círculos'));
+    expect(screen.queryByText('Limpar círculos')).toBeNull();
+  });
+
+  it('renders ItemsPage with multi-select category and rarity chips and allows toggling', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ItemsPage />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText('Itens & Equipamentos')).toBeInTheDocument();
+    const weaponChip = screen.getByTestId('filter-item-category-weapon');
+    const rareChip = screen.getByTestId('filter-item-rarity-rare');
+
+    expect(weaponChip).toBeInTheDocument();
+    expect(rareChip).toBeInTheDocument();
+
+    fireEvent.click(weaponChip);
+    expect(screen.getByText('Limpar categorias')).toBeInTheDocument();
+
+    fireEvent.click(rareChip);
+    expect(screen.getByText('Limpar raridades')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Limpar categorias'));
+    expect(screen.queryByText('Limpar categorias')).toBeNull();
   });
 
   it('renders SpellDetailModal with full mechanics and Edit action for Homebrew', () => {

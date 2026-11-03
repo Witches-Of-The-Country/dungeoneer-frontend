@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BookOpen, Loader2, Plus } from 'lucide-react';
+import { BookOpen, Loader2, Plus, X } from 'lucide-react';
 import { useInfiniteItems, type Item } from '@/lib/api/encyclopedia';
 import { useAuth } from '@/lib/hooks/use-auth';
 import { CreateHomebrewDialog } from '@/components/homebrew/create-homebrew-dialog';
@@ -12,8 +12,7 @@ import { EmptySearchResults } from '@/components/encyclopedia/empty-search-resul
 import { ItemDetailModal } from '@/components/encyclopedia/item-detail-modal';
 import { Button } from '@/components/ui/button';
 
-const ITEM_CATEGORIES = [
-  { value: 'ALL', label: 'Todas as Categorias' },
+const ITEM_CATEGORY_OPTIONS = [
   { value: 'WEAPON', label: 'Armas' },
   { value: 'ARMOR', label: 'Armaduras & Escudos' },
   { value: 'POTION', label: 'Poções' },
@@ -26,8 +25,7 @@ const ITEM_CATEGORIES = [
   { value: 'ADVENTURING_GEAR', label: 'Equipamento de Aventura' },
 ];
 
-const ITEM_RARITIES = [
-  { value: 'ALL', label: 'Todas as Raridades' },
+const ITEM_RARITY_OPTIONS = [
   { value: 'COMMON', label: 'Comum' },
   { value: 'UNCOMMON', label: 'Incomum' },
   { value: 'RARE', label: 'Raro' },
@@ -49,14 +47,26 @@ export default function ItemsPage() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('ALL');
-  const [rarity, setRarity] = useState('ALL');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
   const [ruleset, setRuleset] = useState('ALL');
+
+  const toggleCategory = (cat: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const toggleRarity = (rar: string) => {
+    setSelectedRarities((prev) =>
+      prev.includes(rar) ? prev.filter((r) => r !== rar) : [...prev, rar]
+    );
+  };
 
   const filters = {
     q: search || undefined,
-    category: category !== 'ALL' ? category : undefined,
-    rarity: rarity !== 'ALL' ? rarity : undefined,
+    categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+    rarities: selectedRarities.length > 0 ? selectedRarities : undefined,
     ruleset: ruleset !== 'ALL' ? ruleset : undefined,
     limit: 20,
   };
@@ -75,10 +85,16 @@ export default function ItemsPage() {
 
   const handleResetFilters = () => {
     setSearch('');
-    setCategory('ALL');
-    setRarity('ALL');
+    setSelectedCategories([]);
+    setSelectedRarities([]);
     setRuleset('ALL');
   };
+
+  const hasActiveFilters =
+    Boolean(search) ||
+    selectedCategories.length > 0 ||
+    selectedRarities.length > 0 ||
+    ruleset !== 'ALL';
 
   return (
     <div className="space-y-6">
@@ -122,53 +138,102 @@ export default function ItemsPage() {
       />
 
       <div className="space-y-3 bg-card/60 p-4 rounded-xl border border-border/60">
-        <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <SearchBar
             value={search}
             onChange={setSearch}
             placeholder="Buscar item por nome (PT/EN), tipo ou propriedades..."
           />
 
-          <div className="flex flex-wrap sm:flex-nowrap gap-2">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="bg-card border border-border/80 text-foreground text-xs rounded-lg px-3 py-2 focus:ring-accent focus:border-accent"
-              aria-label="Filtrar por categoria"
-            >
-              {ITEM_CATEGORIES.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+          <select
+            value={ruleset}
+            onChange={(e) => setRuleset(e.target.value)}
+            className="bg-card border border-border/80 text-foreground text-xs rounded-lg px-3 py-2 focus:ring-accent focus:border-accent"
+            aria-label="Filtrar por conjunto de regras"
+          >
+            {RULESETS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-            <select
-              value={rarity}
-              onChange={(e) => setRarity(e.target.value)}
-              className="bg-card border border-border/80 text-foreground text-xs rounded-lg px-3 py-2 focus:ring-accent focus:border-accent"
-              aria-label="Filtrar por raridade"
+        {/* Multi-Select Category Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+          <span className="text-xs font-semibold text-muted-foreground mr-1">
+            Categorias:
+          </span>
+          {ITEM_CATEGORY_OPTIONS.map((opt) => {
+            const active = selectedCategories.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                data-testid={`filter-item-category-${opt.value.toLowerCase()}`}
+                onClick={() => toggleCategory(opt.value)}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  active
+                    ? 'border-amber-500 bg-amber-500/25 text-amber-200'
+                    : 'border-border/60 bg-card text-muted-foreground hover:border-accent/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {selectedCategories.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedCategories([])}
+              className="text-xs text-muted-foreground hover:text-foreground underline ml-2"
             >
-              {ITEM_RARITIES.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              Limpar categorias
+            </button>
+          )}
+        </div>
 
-            <select
-              value={ruleset}
-              onChange={(e) => setRuleset(e.target.value)}
-              className="bg-card border border-border/80 text-foreground text-xs rounded-lg px-3 py-2 focus:ring-accent focus:border-accent"
-              aria-label="Filtrar por conjunto de regras"
+        {/* Multi-Select Rarity Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40">
+          <span className="text-xs font-semibold text-muted-foreground mr-1">
+            Raridades:
+          </span>
+          {ITEM_RARITY_OPTIONS.map((opt) => {
+            const active = selectedRarities.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                data-testid={`filter-item-rarity-${opt.value.toLowerCase()}`}
+                onClick={() => toggleRarity(opt.value)}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  active
+                    ? 'border-amber-500 bg-amber-500/25 text-amber-200'
+                    : 'border-border/60 bg-card text-muted-foreground hover:border-accent/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {selectedRarities.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedRarities([])}
+              className="text-xs text-muted-foreground hover:text-foreground underline ml-2"
             >
-              {RULESETS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              Limpar raridades
+            </button>
+          )}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="text-xs text-amber-400 hover:text-amber-300 ml-auto flex items-center gap-1"
+            >
+              <X className="w-3 h-3" /> Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 
