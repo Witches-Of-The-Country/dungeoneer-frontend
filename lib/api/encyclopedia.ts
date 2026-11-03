@@ -24,6 +24,12 @@ export interface Spell {
   source: string;
 }
 
+export interface AbilityBonusChoice {
+  chooseCount: number;
+  allowedAbilities: string[];
+  bonusAmount: number;
+}
+
 export interface Feat {
   id: string;
   ruleset: string;
@@ -33,7 +39,34 @@ export interface Feat {
   prerequisites?: string;
   description: string;
   featType?: 'GENERAL' | 'ORIGIN' | 'CLASS' | 'SUBCLASS' | 'LINEAGE' | string;
-  mechanicalEffects?: any;
+  mechanicalEffects?: {
+    abilityBonuses?: Record<string, number>;
+    abilityBonusChoice?: AbilityBonusChoice | null;
+    prerequisiteRules?: Array<{
+      type: string;
+      targetKey?: string;
+      minValue?: number;
+      displayLabel?: string;
+    }>;
+    spellChoice?: {
+      cantripsCount: number;
+      spellsCount: number;
+      spellLevel?: number;
+      allowedClasses?: string[];
+    } | null;
+    hpPerLevelBonus?: number;
+    speedBonus?: number;
+    acBonus?: number;
+    initiativeBonus?: number;
+    grantedProficiencies?: string[];
+    actionName?: string;
+    actionType?: string;
+    diceFormula?: string;
+    usesPerRest?: number;
+    restType?: string;
+    conditional?: boolean;
+    conditionDescription?: string;
+  } | null;
   source: string;
 }
 

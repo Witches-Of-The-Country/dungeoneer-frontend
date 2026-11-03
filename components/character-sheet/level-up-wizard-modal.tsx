@@ -22,6 +22,7 @@ import {
   ABILITY_KEYS,
   ABILITY_LABELS,
   AbilityKey,
+  normalizeAbilityKey,
 } from '@/lib/api/characters';
 import {
   fetchSubclasses,
@@ -105,6 +106,7 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
   const [primaryStat, setPrimaryStat] = useState<string>('STRENGTH');
   const [secondaryStat, setSecondaryStat] = useState<string>('CONSTITUTION');
   const [asiPlusTwo, setAsiPlusTwo] = useState<boolean>(true);
+  const [halfFeatAbilityChoice, setHalfFeatAbilityChoice] = useState<string>('');
 
   const levelUpMutation = useLevelUp(character.id);
   const rollHpMutation = useRollHitPoints();
@@ -325,6 +327,41 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
     [selectableFeats, selectedFeatId]
   );
 
+  const halfFeatChoiceConfig = useMemo(() => {
+    if (!selectedFeatObject?.mechanicalEffects) return null;
+    const choice = selectedFeatObject.mechanicalEffects.abilityBonusChoice;
+    if (choice && Array.isArray(choice.allowedAbilities) && choice.allowedAbilities.length > 0) {
+      return {
+        type: 'CHOICE' as const,
+        allowedAbilities: choice.allowedAbilities as string[],
+        chooseCount: choice.chooseCount || 1,
+        bonusAmount: choice.bonusAmount || 1,
+      };
+    }
+    const fixed = selectedFeatObject.mechanicalEffects.abilityBonuses;
+    if (fixed && Object.keys(fixed).length > 0) {
+      return {
+        type: 'FIXED' as const,
+        bonuses: fixed as Record<string, number>,
+      };
+    }
+    return null;
+  }, [selectedFeatObject]);
+
+  useEffect(() => {
+    if (halfFeatChoiceConfig?.type === 'CHOICE') {
+      setHalfFeatAbilityChoice((prev) =>
+        halfFeatChoiceConfig.allowedAbilities.some(
+          (a) => a.toUpperCase() === prev.toUpperCase()
+        )
+          ? prev
+          : ''
+      );
+    } else {
+      setHalfFeatAbilityChoice('');
+    }
+  }, [selectedFeatId, halfFeatChoiceConfig]);
+
   const filteredFeats = useMemo(() => {
     return selectableFeats.filter((f) => {
       if (featTypeFilter === 'ORIGIN' && f.featType !== 'ORIGIN') return false;
@@ -383,9 +420,15 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
       }
     }
     if (step === 3 && isAsiLevel) {
-      if (asiOrFeatChoice === 'FEAT' && !selectedFeatId) {
-        toast.error('Selecione um Talento ou escolha Aumento de Atributo.');
-        return;
+      if (asiOrFeatChoice === 'FEAT') {
+        if (!selectedFeatId) {
+          toast.error('Selecione um Talento ou escolha Aumento de Atributo.');
+          return;
+        }
+        if (halfFeatChoiceConfig?.type === 'CHOICE' && !halfFeatAbilityChoice) {
+          toast.error('Selecione o atributo para o bônus do talento (+1).');
+          return;
+        }
       }
     }
     setStep((prev) => prev + 1);
@@ -411,6 +454,14 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
       } else {
         abilityIncreases[primaryStat] = 1;
         abilityIncreases[secondaryStat] = (abilityIncreases[secondaryStat] || 0) + 1;
+      }
+    } else if (isAsiLevel && asiOrFeatChoice === 'FEAT' && halfFeatChoiceConfig) {
+      if (halfFeatChoiceConfig.type === 'CHOICE' && halfFeatAbilityChoice) {
+        abilityIncreases[halfFeatAbilityChoice] = halfFeatChoiceConfig.bonusAmount;
+      } else if (halfFeatChoiceConfig.type === 'FIXED') {
+        Object.entries(halfFeatChoiceConfig.bonuses).forEach(([stat, val]) => {
+          abilityIncreases[stat] = val;
+        });
       }
     }
 
@@ -985,6 +1036,96 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
                         )}
                       </div>
                     )}
+
+                    {/* Half-Feat Ability Score Selector */}
+                    {selectedFeatObject && halfFeatChoiceConfig && (
+                      <div className="p-3.5 rounded-lg border border-amber-500/40 bg-zinc-900/80 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            <span>
+                              Bônus de Atributo do Talento (+{halfFeatChoiceConfig.type === 'CHOICE' ? halfFeatChoiceConfig.bonusAmount : 1})
+                            </span>
+                          </div>
+                          {halfFeatChoiceConfig.type === 'CHOICE' && (
+                            <span className="text-[11px] text-zinc-400 font-mono">
+                              Escolha {halfFeatChoiceConfig.chooseCount}
+                            </span>
+                          )}
+                        </div>
+
+                        {halfFeatChoiceConfig.type === 'CHOICE' ? (
+                          <div className="space-y-2">
+                            <p className="text-[11px] text-zinc-400">
+                              Este talento concede um aumento de atributo. Selecione qual atributo deseja aumentar:
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {halfFeatChoiceConfig.allowedAbilities.map((rawStat) => {
+                                const normKey = normalizeAbilityKey(rawStat);
+                                const label = normKey ? ABILITY_LABELS[normKey] : null;
+                                const shortLabel = label?.short || rawStat;
+                                const fullLabel = label?.full || rawStat;
+                                const isSelected = halfFeatAbilityChoice.toUpperCase() === rawStat.toUpperCase();
+
+                                const currentScore =
+                                  normKey && character.abilityScores ? character.abilityScores[normKey] : 10;
+                                const projectedScore = Math.min(20, currentScore + halfFeatChoiceConfig.bonusAmount);
+
+                                return (
+                                  <button
+                                    key={rawStat}
+                                    type="button"
+                                    onClick={() => setHalfFeatAbilityChoice(rawStat)}
+                                    className={`p-2 rounded-md border text-left transition-all flex flex-col justify-between ${
+                                      isSelected
+                                        ? 'border-amber-400 bg-amber-500/20 text-amber-200 shadow-sm shadow-amber-500/20'
+                                        : 'border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="text-xs font-bold">{shortLabel}</span>
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                          isSelected
+                                            ? 'bg-amber-400 text-zinc-950 font-bold'
+                                            : 'bg-zinc-800 text-zinc-400'
+                                        }`}
+                                      >
+                                        +{halfFeatChoiceConfig.bonusAmount}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                                      <span className="text-zinc-400 truncate text-[10px]">{fullLabel}</span>
+                                      <span className="font-mono text-zinc-200">
+                                        {currentScore} <span className="text-amber-400">→ {projectedScore}</span>
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {!halfFeatAbilityChoice && (
+                              <p className="text-[11px] text-red-400 font-medium">
+                                * É necessário selecionar um atributo para avançar.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs text-amber-200 bg-amber-950/30 p-2 rounded border border-amber-500/20">
+                            <span className="text-zinc-400">Bônus fixos aplicados automaticamente:</span>
+                            {Object.entries(halfFeatChoiceConfig.bonuses).map(([stat, val]) => (
+                              <Badge
+                                key={stat}
+                                variant="secondary"
+                                className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px]"
+                              >
+                                +{val} {stat}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground italic">
@@ -1023,6 +1164,12 @@ export function LevelUpWizardModal({ isOpen, onClose, character }: LevelUpWizard
                       ? asiPlusTwo
                         ? `+2 em ${primaryStat}`
                         : `+1 em ${primaryStat} e +1 em ${secondaryStat}`
+                      : halfFeatChoiceConfig?.type === 'CHOICE' && halfFeatAbilityChoice
+                      ? `Talento: ${selectedFeatObject?.name || 'Selecionado'} (+1 em ${
+                          ABILITY_LABELS[normalizeAbilityKey(halfFeatAbilityChoice) || 'strength']?.full || halfFeatAbilityChoice
+                        })`
+                      : halfFeatChoiceConfig?.type === 'FIXED'
+                      ? `Talento: ${selectedFeatObject?.name || 'Selecionado'} (Bônus de Atributo)`
                       : `Talento: ${selectedFeatObject?.name || 'Selecionado'}`}
                   </span>
                 </div>

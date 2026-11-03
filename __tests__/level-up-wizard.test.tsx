@@ -86,6 +86,23 @@ vi.mock('@/lib/api/encyclopedia', () => ({
         ruleset: 'SRD_2024',
         source: 'SRD',
       },
+      {
+        id: 'feat-athlete',
+        name: 'Atleta',
+        nameEn: 'Athlete',
+        featType: 'GENERAL',
+        prerequisites: 'Nível 4+, Força ou Destreza 13+',
+        description: 'Aumente Força ou Destreza em 1.',
+        ruleset: 'SRD_2024',
+        source: 'SRD',
+        mechanicalEffects: {
+          abilityBonusChoice: {
+            chooseCount: 1,
+            allowedAbilities: ['STR', 'DEX'],
+            bonusAmount: 1,
+          },
+        },
+      },
     ],
   }),
 }));
@@ -327,5 +344,102 @@ describe('XP Progress Bar & Level Up Wizard Modal logic', () => {
 
     // Summary displays selected feat
     expect(screen.getByText('Talento: Mestre de Armas Grandes')).toBeInTheDocument();
+  });
+
+  it('renders half-feat ability score selector, enforces selection before advancing, and submits chosen ability increase in mutation payload', async () => {
+    const mockChar: CharacterResponse = {
+      id: 'char-half-feat',
+      name: 'Conan',
+      level: 3,
+      hitPointsCurrent: 32,
+      hitPointsMax: 32,
+      ruleset: 'SRD_2024',
+      className: 'Guerreiro',
+      lineageName: 'Humano',
+      updatedAt: '2026-11-01T00:00:00Z',
+      archetype: {
+        id: 'arch-fighter',
+        name: 'Guerreiro',
+        hitDice: 'd10',
+        ruleset: 'SRD_2024',
+      },
+      classProgressions: [
+        {
+          id: 'prog-1',
+          characterId: 'char-half-feat',
+          archetypeId: 'arch-fighter',
+          classLevel: 3,
+        },
+      ],
+      classes: [{ className: 'Guerreiro', classLevel: 3 }],
+      abilityScores: {
+        strength: 15,
+        dexterity: 13,
+        constitution: 14,
+        intelligence: 10,
+        wisdom: 12,
+        charisma: 8,
+      },
+    };
+
+    render(
+      <LevelUpWizardModal
+        isOpen={true}
+        onClose={vi.fn()}
+        character={mockChar}
+      />
+    );
+
+    // Step 1: Advance class choice
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Step 2: Advance HP step
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Step 3: Choose Feat
+    const featChoiceBtn = screen.getByTestId('choice-feat-button');
+    fireEvent.click(featChoiceBtn);
+
+    // Select the half-feat "Atleta"
+    const athleteCard = await screen.findByTestId('feat-card-feat-athlete');
+    expect(athleteCard).toBeInTheDocument();
+    fireEvent.click(athleteCard);
+
+    // Verify Half-Feat sub-panel renders with FOR and DES options
+    expect(screen.getByText(/Bônus de Atributo do Talento \(\+1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Escolha 1/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /FOR/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /DES/i })).toBeInTheDocument();
+
+    // Attempt to advance WITHOUT selecting an ability -> blocked
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+    // Step remains at 3 (summary heading is not displayed)
+    expect(screen.queryByText(/Novo Nível Total:/i)).not.toBeInTheDocument();
+
+    // Select FOR (+1 Força: 15 -> 16)
+    const forBtn = screen.getByRole('button', { name: /FOR/i });
+    fireEvent.click(forBtn);
+
+    // Advance to Step 4 (Summary)
+    fireEvent.click(screen.getByRole('button', { name: /Avançar/i }));
+
+    // Verify Step 4 summary shows chosen half-feat with ability boost
+    expect(screen.getByText(/Novo Nível Total:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Talento: Atleta \(\+1 em Força\)/i)).toBeInTheDocument();
+
+    // Confirm Level Up
+    fireEvent.click(screen.getByTestId('levelup-confirm-button'));
+
+    await waitFor(() => {
+      expect(mockLevelUpMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedFeatId: 'feat-athlete',
+          abilityScoreIncreases: {
+            STR: 1,
+          },
+        }),
+        expect.anything()
+      );
+    });
   });
 });
