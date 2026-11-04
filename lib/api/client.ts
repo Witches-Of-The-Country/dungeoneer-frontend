@@ -1,7 +1,11 @@
 import { toast } from 'sonner';
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:9090';
+  process.env.NEXT_PUBLIC_API_URL !== undefined
+    ? process.env.NEXT_PUBLIC_API_URL
+    : typeof window !== 'undefined'
+      ? ''
+      : (process.env.INTERNAL_API_URL || 'http://localhost:9090');
 
 export const AUTH_TOKEN_KEY = 'dungeoneer_auth_token';
 export const AUTH_USER_KEY = 'dungeoneer_auth_user';
