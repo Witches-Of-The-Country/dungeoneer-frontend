@@ -23,6 +23,8 @@ import {
   Star,
   AlertCircle,
   Camera,
+  Moon,
+  Sunrise,
 } from "lucide-react";
 import { toast } from "sonner";
 import { processAvatarImage } from "@/lib/image-upload";
@@ -58,6 +60,7 @@ import { LevelUpWizardModal } from "@/components/character-sheet/level-up-wizard
 import { InventoryTab } from "@/components/character-sheet/inventory-tab";
 import { FeatsTab } from "@/components/character-sheet/feats-tab";
 import { ActionsTab } from "@/components/character-sheet/actions-tab";
+import { RestModal } from "@/components/character-sheet/rest-modal";
 
 type SheetTab =
   | "Resumo"
@@ -98,6 +101,8 @@ export default function CharacterSheetPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAddXpModal, setShowAddXpModal] = useState(false);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [showRestModal, setShowRestModal] = useState(false);
+  const [restModalMode, setRestModalMode] = useState<"SHORT" | "LONG">("SHORT");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [damageAmount, setDamageAmount] = useState("");
   const [healAmount, setHealAmount] = useState("");
@@ -312,6 +317,16 @@ export default function CharacterSheetPage() {
                     Escolhas de Nível Pendentes — Clique para evoluir
                   </button>
                 )}
+                {(character.exhaustion != null && character.exhaustion > 0) && (
+                  <span
+                    data-testid="sheet-exhaustion-badge"
+                    className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-950/80 text-red-300 border border-red-700/60 flex items-center gap-1 shadow-sm"
+                    title={`Nível de Exaustão: ${character.exhaustion}`}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                    Exaustão: {character.exhaustion}
+                  </span>
+                )}
               </div>
               {(() => {
                 const classDisplay =
@@ -334,7 +349,33 @@ export default function CharacterSheetPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end md:self-center">
+          <div className="flex flex-wrap items-center gap-2 self-end md:self-center">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="short-rest-btn"
+              onClick={() => {
+                setRestModalMode("SHORT");
+                setShowRestModal(true);
+              }}
+              className="border-amber-900/50 bg-slate-950 hover:bg-slate-800 text-amber-200"
+            >
+              <Moon className="w-4 h-4 mr-1.5 text-amber-400" />
+              Descanso Curto
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="long-rest-btn"
+              onClick={() => {
+                setRestModalMode("LONG");
+                setShowRestModal(true);
+              }}
+              className="border-amber-900/50 bg-slate-950 hover:bg-slate-800 text-amber-200"
+            >
+              <Sunrise className="w-4 h-4 mr-1.5 text-amber-400" />
+              Descanso Longo
+            </Button>
             <Link href={`/characters/${character.id}/edit`}>
               <Button
                 variant="outline"
@@ -569,9 +610,32 @@ export default function CharacterSheetPage() {
                   <Dices className="w-4 h-4 text-amber-400" />
                   Dados de Vida
                 </span>
-                <span className="font-mono font-bold text-amber-200">
-                  {character.level}
-                  {(character.archetype?.hitDice ?? "d8").toLowerCase()}
+                <span
+                  data-testid="sheet-hit-dice-display"
+                  className="font-mono font-bold text-amber-200"
+                >
+                  {(() => {
+                    const totalAvailable =
+                      character.classes && character.classes.length > 0
+                        ? character.classes.reduce(
+                            (acc, c) =>
+                              acc +
+                              (c.availableHitDice ??
+                                Math.max(0, c.classLevel - (c.hitDiceSpent ?? 0))),
+                            0
+                          )
+                        : character.level;
+                    const hdBreakdown =
+                      character.classes && character.classes.length > 0
+                        ? character.classes
+                            .map(
+                              (c) =>
+                                `${c.classLevel}${c.hitDie ? c.hitDie.toLowerCase() : "d8"}`
+                            )
+                            .join(" + ")
+                        : `${character.level}${(character.archetype?.hitDice ?? "d8").toLowerCase()}`;
+                    return `${totalAvailable}/${character.level} (${hdBreakdown})`;
+                  })()}
                 </span>
               </div>
             </CardContent>
@@ -837,6 +901,13 @@ export default function CharacterSheetPage() {
         isOpen={showLevelUpModal}
         onClose={() => setShowLevelUpModal(false)}
         character={character}
+      />
+
+      <RestModal
+        isOpen={showRestModal}
+        onClose={() => setShowRestModal(false)}
+        character={character}
+        initialMode={restModalMode}
       />
 
       <DeleteCharacterModal

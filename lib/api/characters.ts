@@ -57,9 +57,13 @@ export interface ReferenceBackground {
 }
 
 export interface CharacterClassSummary {
+  classProgressionId?: string;
   className: string;
   subclassName?: string | null;
   classLevel: number;
+  hitDie?: string;
+  hitDiceSpent?: number;
+  availableHitDice?: number;
 }
 
 export interface CharacterSummary {
@@ -217,8 +221,24 @@ export interface CharacterResponse {
   inventory?: CharacterItem[];
   feats?: CharacterFeat[];
   actions?: CharacterAction[];
+  exhaustion?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type CharacterSheet = CharacterResponse;
+
+export type RestType = 'SHORT' | 'LONG';
+
+export interface HitDiceSpendItem {
+  classProgressionId: string;
+  count: number;
+}
+
+export interface RestPayload {
+  restType: RestType;
+  hpHealed?: number;
+  hitDiceSpends?: HitDiceSpendItem[];
 }
 
 export interface CreateCharacterPayload {
@@ -576,6 +596,28 @@ export function useRollAbilityScores() {
 export function useRollHitPoints() {
   return useMutation({
     mutationFn: (payload: HpRollPayload) => rollHitPoints(payload),
+  });
+}
+
+export async function takeRest(
+  characterId: string,
+  payload: RestPayload
+): Promise<CharacterResponse> {
+  return apiFetch<CharacterResponse>(`/api/characters/${characterId}/rest`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function useTakeRest(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RestPayload) => takeRest(characterId, payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
   });
 }
 
