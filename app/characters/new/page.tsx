@@ -31,9 +31,11 @@ import {
   Minus,
   RotateCcw,
   AlertCircle,
-  Trash2,
+  Wand2,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
+import { processAvatarImage } from "@/lib/image-upload";
 
 import { Stepper } from "@/components/ui/stepper";
 import {
@@ -51,7 +53,6 @@ import {
   useReferenceClasses,
   useReferenceBackgrounds,
   useRollAbilityScores,
-  useRollHitPoints,
   useCreateCharacter,
   Ruleset,
   AbilityScoreMethod,
@@ -60,13 +61,19 @@ import {
   ABILITY_KEYS,
   ABILITY_LABELS,
   DND_SKILLS,
-  ClassProgressionPayload,
+  DND_XP_THRESHOLDS,
   normalizeAbilityKey,
   calculateModifier,
   formatModifier,
   calculateProficiencyBonus,
   calculatePointBuyTotal,
 } from "@/lib/api/characters";
+import {
+  fetchSubclasses,
+  fetchFeats,
+  Subclass,
+  Feat,
+} from "@/lib/api/encyclopedia";
 import {
   CLASS_SKILL_OPTIONS,
   translateReferenceName,
@@ -252,9 +259,47 @@ function DroppableAbilitySlot({
   );
 }
 
+function isLevelOneSubclassClass(cls: { name?: string; ruleset?: string; subclassLevel?: number } | null): boolean {
+  if (!cls) return false;
+  if (typeof cls.subclassLevel === "number") {
+    return cls.subclassLevel === 1;
+  }
+  if (cls.ruleset === "SRD_2014") {
+    const n = (cls.name || "").toLowerCase();
+    return (
+      n.includes("cleric") ||
+      n.includes("clérigo") ||
+      n.includes("sorcerer") ||
+      n.includes("feiticeiro") ||
+      n.includes("warlock") ||
+      n.includes("bruxo")
+    );
+  }
+  return false;
+}
+
 export default function CharacterCreationWizardPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
+  const [characterAvatarUrl, setCharacterAvatarUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const dataUrl = await processAvatarImage(file);
+      setCharacterAvatarUrl(dataUrl);
+      toast.success("Retrato do personagem carregado!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao processar imagem.";
+      toast.error(msg);
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = "";
+    }
+  };
 
   // Step 1 form (React Hook Form + Zod)
   const step1Form = useForm<WizardStep1Values>({
@@ -269,23 +314,42 @@ export default function CharacterCreationWizardPage() {
   const watchedName = step1Form.watch("name");
   const watchedRuleset = step1Form.watch("ruleset") as Ruleset;
 
-  // Step 3 Level, HP & Multiclass State
+  // Step 3 Level, HP, Subclass & Skills State
   const [characterLevel, setCharacterLevel] = useState<number>(1);
-  const [primaryClassLevel, setPrimaryClassLevel] = useState<number>(1);
-  const [secondaryClasses, setSecondaryClasses] = useState<
-    { classId: string; classLevel: number }[]
-  >([]);
-  const [hpMethod, setHpMethod] = useState<HpCalculationMethod>("MAX");
-  const [hpRollsByClass, setHpRollsByClass] = useState<
-    Record<string, { rollId: string; rolledHpPerLevel: number[] }>
-  >({});
+  const [hpMethod, setHpMethod] = useState<HpCalculationMethod>("AVERAGE");
   const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
+  const [availableSubclasses, setAvailableSubclasses] = useState<Subclass[]>([]);
+  const [selectedSubclassId, setSelectedSubclassId] = useState<string>("");
 
-  // Queries for Reference Data
-  const { data: lineages = [], isLoading: loadingLineages } =
+  // Step 4 Origin Feat State (SRD_2024)
+  const [originFeats, setOriginFeats] = useState<Feat[]>([]);
+  const [selectedOriginFeatId, setSelectedOriginFeatId] = useState<string>("");
+
+  // Queries for Reference Data (SRD + HOMEBREW)
+  const { data: srdLineages = [], isLoading: loadingLineages } =
     useReferenceLineages(watchedRuleset);
-  const { data: classes = [], isLoading: loadingClasses } =
+  const { data: homebrewLineages = [] } = useReferenceLineages("HOMEBREW");
+  const lineages = useMemo(() => {
+    const seen = new Set<string>();
+    return [...srdLineages, ...homebrewLineages].filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [srdLineages, homebrewLineages]);
+
+  const { data: srdClasses = [], isLoading: loadingClasses } =
     useReferenceClasses(watchedRuleset);
+  const { data: homebrewClasses = [] } = useReferenceClasses("HOMEBREW");
+  const classes = useMemo(() => {
+    const seen = new Set<string>();
+    return [...srdClasses, ...homebrewClasses].filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [srdClasses, homebrewClasses]);
+
   const { data: backgrounds = [], isLoading: loadingBackgrounds } =
     useReferenceBackgrounds(watchedRuleset);
 
@@ -335,125 +399,91 @@ export default function CharacterCreationWizardPage() {
     [backgrounds, selectedBackgroundId]
   );
 
-  // Step 3 Level, HP & Multiclass Handlers
-  const hpRollMutation = useRollHitPoints();
+  const requiresLevelOneSubclass = useMemo(
+    () => isLevelOneSubclassClass(selectedClass),
+    [selectedClass]
+  );
 
-  const totalClassLevels = useMemo(() => {
-    return (
-      primaryClassLevel +
-      secondaryClasses.reduce((acc, sc) => acc + sc.classLevel, 0)
-    );
-  }, [primaryClassLevel, secondaryClasses]);
+  // Load subclasses when selectedClass requires a Level 1 subclass
+  useEffect(() => {
+    if (!selectedClassId || !requiresLevelOneSubclass) {
+      setAvailableSubclasses([]);
+      setSelectedSubclassId("");
+      return;
+    }
+    let active = true;
+    Promise.all([
+      fetchSubclasses(selectedClassId, watchedRuleset).catch(() => []),
+      fetchSubclasses(selectedClassId, "HOMEBREW").catch(() => []),
+    ]).then(([srdSubs, hbSubs]) => {
+      if (!active) return;
+      const seen = new Set<string>();
+      const merged = [...(srdSubs || []), ...(hbSubs || [])].filter((s) => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
+      setAvailableSubclasses(merged);
+      setSelectedSubclassId((prev) =>
+        merged.some((s) => s.id === prev) ? prev : merged[0]?.id || ""
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedClassId, requiresLevelOneSubclass, watchedRuleset]);
+
+  // Load Origin Feats when ruleset is SRD_2024
+  useEffect(() => {
+    if (watchedRuleset !== "SRD_2024") {
+      setOriginFeats([]);
+      setSelectedOriginFeatId("");
+      return;
+    }
+    let active = true;
+    Promise.all([
+      fetchFeats({ ruleset: "SRD_2024", limit: 100 }).catch(() => ({ items: [] })),
+      fetchFeats({ ruleset: "HOMEBREW", limit: 100 }).catch(() => ({ items: [] })),
+    ]).then(([srdPage, hbPage]) => {
+      if (!active) return;
+      const seen = new Set<string>();
+      const merged = [...(srdPage?.items || []), ...(hbPage?.items || [])].filter(
+        (f) => {
+          if (seen.has(f.id)) return false;
+          seen.add(f.id);
+          return !f.featType || f.featType === "ORIGIN";
+        }
+      );
+      setOriginFeats(merged);
+    });
+    return () => {
+      active = false;
+    };
+  }, [watchedRuleset]);
+
+  // Pre-select matching background origin feat when background changes in SRD_2024
+  useEffect(() => {
+    if (watchedRuleset !== "SRD_2024" || originFeats.length === 0) return;
+    if (selectedBackground?.originFeatName) {
+      const targetName = selectedBackground.originFeatName.trim().toLowerCase();
+      const matched = originFeats.find(
+        (f) =>
+          f.name.trim().toLowerCase() === targetName ||
+          (f.nameEn && f.nameEn.trim().toLowerCase() === targetName)
+      );
+      if (matched) {
+        setSelectedOriginFeatId(matched.id);
+        return;
+      }
+    }
+    if (!selectedOriginFeatId && originFeats.length > 0) {
+      setSelectedOriginFeatId(originFeats[0].id);
+    }
+  }, [watchedRuleset, selectedBackground, originFeats, selectedOriginFeatId]);
 
   const handleLevelChange = (lvl: number) => {
     const validLevel = Math.min(20, Math.max(1, lvl));
     setCharacterLevel(validLevel);
-    if (secondaryClasses.length === 0) {
-      setPrimaryClassLevel(validLevel);
-    } else {
-      const secondarySum = secondaryClasses.reduce(
-        (acc, sc) => acc + sc.classLevel,
-        0
-      );
-      if (secondarySum >= validLevel) {
-        setSecondaryClasses([]);
-        setPrimaryClassLevel(validLevel);
-      } else {
-        setPrimaryClassLevel(validLevel - secondarySum);
-      }
-    }
-  };
-
-  const handleAddSecondaryClass = () => {
-    const available = classes.filter(
-      (c) =>
-        c.id !== selectedClassId &&
-        !secondaryClasses.some((sc) => sc.classId === c.id)
-    );
-    if (available.length === 0) {
-      toast.error("Todas as classes disponíveis já foram adicionadas.");
-      return;
-    }
-    let nextPrimary = primaryClassLevel;
-    if (nextPrimary > 1) {
-      nextPrimary -= 1;
-      setPrimaryClassLevel(nextPrimary);
-    }
-    setSecondaryClasses((prev) => [
-      ...prev,
-      { classId: available[0].id, classLevel: 1 },
-    ]);
-  };
-
-  const handleRemoveSecondaryClass = (index: number) => {
-    setSecondaryClasses((prev) => {
-      const removed = prev[index];
-      const next = prev.filter((_, i) => i !== index);
-      setPrimaryClassLevel((p) => p + removed.classLevel);
-      return next;
-    });
-  };
-
-  const handleUpdateSecondaryClass = (
-    index: number,
-    field: "classId" | "classLevel",
-    val: string | number
-  ) => {
-    setSecondaryClasses((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item;
-        if (field === "classId") {
-          return { ...item, classId: String(val) };
-        } else {
-          return { ...item, classLevel: Math.max(1, Number(val) || 1) };
-        }
-      })
-    );
-  };
-
-  const activeClassHpRoll = selectedClassId
-    ? hpRollsByClass[selectedClassId] ?? null
-    : null;
-
-  const handleRollHpForClass = async (
-    archetypeId: string,
-    level: number,
-    isSecondaryClass: boolean,
-    className: string
-  ) => {
-    try {
-      const res = await hpRollMutation.mutateAsync({
-        archetypeId,
-        level,
-        isSecondaryClass,
-      });
-      setHpRollsByClass((prev) => ({
-        ...prev,
-        [archetypeId]: {
-          rollId: res.rollId,
-          rolledHpPerLevel: res.rolledHpPerLevel,
-        },
-      }));
-      toast.success(`Dados de Vida rolados para ${className}!`);
-    } catch {
-      // handled by apiFetch
-    }
-  };
-
-  const handleRollHp = async () => {
-    if (!selectedClassId || !selectedClass) {
-      toast.error("Selecione uma classe primeiro.");
-      return;
-    }
-    const isMulticlass = secondaryClasses.length > 0;
-    const rollsCount = isMulticlass ? primaryClassLevel : characterLevel;
-    if (rollsCount <= 1) return;
-    await handleRollHpForClass(
-      selectedClassId,
-      rollsCount,
-      false,
-      selectedClass.name
-    );
   };
 
   // Class Skills Selection
@@ -782,7 +812,6 @@ export default function CharacterCreationWizardPage() {
     if (selectedChipId) {
       assignChipToSlot(selectedChipId, ability);
     } else if (activePool.length > 0 && !activeSlots[ability]) {
-      // Quick-assign first chip in pool if user clicks an empty slot directly
       assignChipToSlot(activePool[0].id, ability);
     }
   };
@@ -835,7 +864,12 @@ export default function CharacterCreationWizardPage() {
     };
   }, [baseAbilityScores, computedAsiBonuses]);
 
-  // Derived combat stats preview for Step 6
+  const selectedOriginFeat = useMemo(
+    () => originFeats.find((f) => f.id === selectedOriginFeatId) ?? null,
+    [originFeats, selectedOriginFeatId]
+  );
+
+  // Derived combat stats preview for Step 6 (Level 1 base stats + target XP floor)
   const derivedStats = useMemo(() => {
     const conMod = calculateModifier(finalAbilityScores.constitution);
     const dexMod = calculateModifier(finalAbilityScores.dexterity);
@@ -843,75 +877,27 @@ export default function CharacterCreationWizardPage() {
       (selectedClass?.hitDice ?? "d8").replace(/\D/g, "") || 8
     );
 
-    let maxHp = hitDieFaces + conMod;
-    if (characterLevel > 1) {
-      if (secondaryClasses.length > 0) {
-        // Multiclass calculation
-        const primaryExtraLevels = primaryClassLevel - 1;
-        if (primaryExtraLevels > 0) {
-          if (hpMethod === "MAX") {
-            maxHp += primaryExtraLevels * (hitDieFaces + conMod);
-          } else if (hpMethod === "ROLLED") {
-            const rolls = hpRollsByClass[selectedClassId]?.rolledHpPerLevel ?? [];
-            const sumRolls = rolls.reduce((a, b) => a + b, 0);
-            maxHp += sumRolls + primaryExtraLevels * conMod;
-          } else {
-            const avgPerLevel = Math.floor(hitDieFaces / 2) + 1;
-            maxHp += primaryExtraLevels * (avgPerLevel + conMod);
-          }
-        }
-        for (const sec of secondaryClasses) {
-          const secClass = classes.find((c) => c.id === sec.classId);
-          const secFaces = Number(
-            (secClass?.hitDice ?? "d8").replace(/\D/g, "") || 8
-          );
-          if (hpMethod === "MAX") {
-            maxHp += sec.classLevel * (secFaces + conMod);
-          } else if (hpMethod === "ROLLED") {
-            const rolls = hpRollsByClass[sec.classId]?.rolledHpPerLevel ?? [];
-            const sumRolls = rolls.reduce((a, b) => a + b, 0);
-            maxHp += sumRolls + sec.classLevel * conMod;
-          } else {
-            const avgPerLevel = Math.floor(secFaces / 2) + 1;
-            maxHp += sec.classLevel * (avgPerLevel + conMod);
-          }
-        }
-      } else {
-        // Mono-class
-        if (hpMethod === "MAX") {
-          maxHp += (characterLevel - 1) * (hitDieFaces + conMod);
-        } else if (hpMethod === "ROLLED" && activeClassHpRoll?.rolledHpPerLevel) {
-          const sumRolls = activeClassHpRoll.rolledHpPerLevel.reduce(
-            (a, b) => a + b,
-            0
-          );
-          maxHp += sumRolls + (characterLevel - 1) * conMod;
-        } else {
-          const avgPerLevel = Math.floor(hitDieFaces / 2) + 1;
-          maxHp += (characterLevel - 1) * (avgPerLevel + conMod);
-        }
-      }
-    }
+    const featHpPerLevel =
+      Number(selectedOriginFeat?.mechanicalEffects?.hpPerLevelBonus) || 0;
+    const maxHp = Math.max(1, hitDieFaces + conMod + featHpPerLevel);
+    const targetXp =
+      DND_XP_THRESHOLDS[Math.min(19, Math.max(0, characterLevel - 1))] ?? 0;
 
     return {
-      maxHp: Math.max(1, maxHp),
+      maxHp,
       ac: 10 + dexMod,
       initiative: dexMod,
       speed: selectedLineage?.speed ?? 30,
-      proficiencyBonus: calculateProficiencyBonus(characterLevel),
+      proficiencyBonus: calculateProficiencyBonus(1),
+      targetProficiencyBonus: calculateProficiencyBonus(characterLevel),
+      targetXp,
     };
   }, [
     finalAbilityScores,
     selectedClass,
     selectedLineage,
     characterLevel,
-    hpMethod,
-    activeClassHpRoll,
-    secondaryClasses,
-    primaryClassLevel,
-    hpRollsByClass,
-    selectedClassId,
-    classes,
+    selectedOriginFeat,
   ]);
 
   // Navigation Handlers
@@ -925,39 +911,15 @@ export default function CharacterCreationWizardPage() {
         toast.error("Selecione uma classe antes de avançar.");
         return;
       }
-      if (totalClassLevels !== characterLevel) {
+      if (
+        requiresLevelOneSubclass &&
+        availableSubclasses.length > 0 &&
+        !selectedSubclassId
+      ) {
         toast.error(
-          `A soma dos níveis das classes (${totalClassLevels}) deve ser exatamente igual ao nível total selecionado (${characterLevel}).`
+          "Esta classe exige a escolha de uma Subclasse já no Nível 1."
         );
         return;
-      }
-      if (characterLevel > 1 && hpMethod === "ROLLED") {
-        if (secondaryClasses.length === 0) {
-          if (!activeClassHpRoll) {
-            toast.error(
-              "Role os dados de vida para a classe selecionada antes de avançar."
-            );
-            return;
-          }
-        } else {
-          if (primaryClassLevel > 1 && !hpRollsByClass[selectedClassId]) {
-            toast.error(
-              `Role os dados de vida da classe principal (${selectedClass?.name}) antes de avançar.`
-            );
-            return;
-          }
-          for (const sec of secondaryClasses) {
-            if (!hpRollsByClass[sec.classId]) {
-              const secName =
-                classes.find((c) => c.id === sec.classId)?.name ||
-                "secundária";
-              toast.error(
-                `Role os dados de vida da classe ${secName} antes de avançar.`
-              );
-              return;
-            }
-          }
-        }
       }
     }
     if (currentStep === 5 && !isStep5Valid) {
@@ -987,17 +949,6 @@ export default function CharacterCreationWizardPage() {
       }
     }
 
-    const classProgressionsPayload: ClassProgressionPayload[] = [
-      {
-        archetypeId: selectedClassId,
-        classLevel: primaryClassLevel,
-      },
-      ...secondaryClasses.map((sc) => ({
-        archetypeId: sc.classId,
-        classLevel: sc.classLevel,
-      })),
-    ];
-
     const consolidatedSkills = Array.from(
       new Set([
         ...selectedClassSkills,
@@ -1013,6 +964,14 @@ export default function CharacterCreationWizardPage() {
         lineageId: selectedLineageId,
         backgroundId: selectedBackgroundId,
         archetypeId: selectedClassId,
+        subclassId:
+          requiresLevelOneSubclass && selectedSubclassId
+            ? selectedSubclassId
+            : null,
+        originFeatId:
+          watchedRuleset === "SRD_2024" && selectedOriginFeatId
+            ? selectedOriginFeatId
+            : null,
         abilityScoreMethod: abilityMethod,
         abilityScores: baseAbilityScores,
         abilityScoreBonuses:
@@ -1020,19 +979,8 @@ export default function CharacterCreationWizardPage() {
             ? abilityScoreBonusesPayload
             : undefined,
         abilityRollId: abilityMethod === "ROLLED" ? abilityRollId : undefined,
-        hpCalculationMethod: characterLevel > 1 ? hpMethod : "MAX",
-        hpRollId:
-          characterLevel > 1 && hpMethod === "ROLLED"
-            ? (activeClassHpRoll?.rollId || Object.values(hpRollsByClass)[0]?.rollId)
-            : undefined,
-        hpRollIds:
-          characterLevel > 1 && hpMethod === "ROLLED"
-            ? Object.values(hpRollsByClass).map((r) => r.rollId)
-            : undefined,
-        classProgressions:
-          classProgressionsPayload.length > 0
-            ? classProgressionsPayload
-            : undefined,
+        hpCalculationMethod: hpMethod,
+        avatarUrl: characterAvatarUrl || undefined,
         skillProficiencies:
           consolidatedSkills.length > 0 ? consolidatedSkills : undefined,
       });
@@ -1040,7 +988,11 @@ export default function CharacterCreationWizardPage() {
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(ROLL_STORAGE_KEY);
       }
-      toast.success(`Personagem "${created.name}" criado com sucesso!`);
+      toast.success(
+        characterLevel > 1
+          ? `Personagem "${created.name}" criado! Conclua a progressão até o Nível ${characterLevel} na ficha.`
+          : `Personagem "${created.name}" criado com sucesso!`
+      );
       router.push(`/characters/${created.id}`);
     } catch {
       // handled by apiFetch
@@ -1081,27 +1033,58 @@ export default function CharacterCreationWizardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Character Name */}
-                <div className="space-y-2">
-                  <Label htmlFor="character-name" className="text-amber-100">
-                    Nome do Personagem
-                  </Label>
-                  <Input
-                    id="character-name"
-                    placeholder="Ex: Thorin Escudo de Carvalho"
-                    value={watchedName}
-                    onChange={(e) =>
-                      step1Form.setValue("name", e.target.value, {
-                        shouldValidate: true,
-                      })
-                    }
-                    className="bg-slate-950 border-amber-900/50 text-amber-50"
-                  />
-                  {step1Form.formState.errors.name && (
-                    <p className="text-xs text-red-400">
-                      {step1Form.formState.errors.name.message}
-                    </p>
-                  )}
+                {/* Character Name & Avatar */}
+                <div className="flex flex-col sm:flex-row gap-4 items-start">
+                  <div className="relative group shrink-0">
+                    <div className="w-20 h-20 rounded-2xl bg-slate-950 border border-amber-900/50 flex items-center justify-center text-amber-400 overflow-hidden shadow-inner">
+                      {characterAvatarUrl ? (
+                        <img
+                          src={characterAvatarUrl}
+                          alt="Retrato do Personagem"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Shield className="w-9 h-9 opacity-60" />
+                      )}
+                    </div>
+                    <label
+                      htmlFor="character-avatar-input"
+                      className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer shadow-md transition-transform active:scale-95"
+                      title="Carregar Retrato"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <input
+                        id="character-avatar-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        disabled={uploadingAvatar}
+                        onChange={handleAvatarFileChange}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="space-y-2 flex-1 w-full">
+                    <Label htmlFor="character-name" className="text-amber-100">
+                      Nome do Personagem
+                    </Label>
+                    <Input
+                      id="character-name"
+                      placeholder="Ex: Thorin Escudo de Carvalho"
+                      value={watchedName}
+                      onChange={(e) =>
+                        step1Form.setValue("name", e.target.value, {
+                          shouldValidate: true,
+                        })
+                      }
+                      className="bg-slate-950 border-amber-900/50 text-amber-50"
+                    />
+                    {step1Form.formState.errors.name && (
+                      <p className="text-xs text-red-400">
+                        {step1Form.formState.errors.name.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Ruleset Selector */}
@@ -1258,10 +1241,10 @@ export default function CharacterCreationWizardPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-2xl font-serif text-amber-200">
                   <Shield className="w-6 h-6 text-amber-500" />
-                  Passo 3 — Classe &amp; Nível
+                  Passo 3 — Classe &amp; Progressão
                 </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Defina a classe principal, nível do personagem, cálculo de pontos de vida e perícias de classe.
+                  Defina a classe inicial, o nível alvo, o método de ganho de Pontos de Vida para a carreira e as perícias de classe.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1273,7 +1256,7 @@ export default function CharacterCreationWizardPage() {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                       <Label className="text-amber-200 text-xs uppercase font-bold tracking-wider block mb-1">
-                        Classe Principal
+                        Classe Inicial
                       </Label>
                       {classes.map((cls) => (
                         <button
@@ -1286,7 +1269,14 @@ export default function CharacterCreationWizardPage() {
                               : "border-amber-900/30 bg-slate-950/60 text-slate-300 hover:border-amber-700/50"
                           }`}
                         >
-                          <div className="font-serif font-bold">{cls.name}</div>
+                          <div className="font-serif font-bold flex items-center justify-between">
+                            <span>{cls.name}</span>
+                            {cls.ruleset === "HOMEBREW" && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                Homebrew
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-slate-400">
                             Dado de Vida: {cls.hitDice.toUpperCase()} •{" "}
                             {formatAbilityName(cls.primaryAbility)}
@@ -1337,11 +1327,49 @@ export default function CharacterCreationWizardPage() {
                           </div>
                         </div>
 
-                        {/* Initial Level Selector */}
-                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-2">
+                        {/* Subclass Selection when class unlocks Subclass at Level 1 */}
+                        {requiresLevelOneSubclass && (
+                          <div className="p-4 rounded-xl bg-amber-950/25 border border-amber-500/40 space-y-3">
+                            <Label
+                              htmlFor="level-1-subclass"
+                              className="text-amber-300 font-serif font-bold text-sm flex items-center gap-2"
+                            >
+                              <Wand2 className="w-4 h-4 text-amber-400" />
+                              Subclasse de Nível 1 ({selectedClass.name})
+                            </Label>
+                            <p className="text-xs text-slate-300">
+                              Esta classe escolhe sua especialização já no 1º nível.
+                            </p>
+                            {availableSubclasses.length > 0 ? (
+                              <select
+                                id="level-1-subclass"
+                                data-testid="level-1-subclass-select"
+                                value={selectedSubclassId}
+                                onChange={(e) => setSelectedSubclassId(e.target.value)}
+                                className="w-full h-10 px-3 py-2 rounded-lg border border-amber-600/50 bg-slate-950 text-amber-100 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400"
+                              >
+                                {availableSubclasses.map((sc) => (
+                                  <option key={sc.id} value={sc.id}>
+                                    {sc.name}
+                                    {sc.nameEn && sc.nameEn !== sc.name
+                                      ? ` (${sc.nameEn})`
+                                      : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-xs text-amber-200/80 italic">
+                                Nenhuma subclasse cadastrada para esta classe.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Target Level Selector */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <Label htmlFor="character-level" className="text-amber-100 font-serif font-bold text-sm">
-                              Nível Inicial do Personagem (1–20)
+                              Nível Alvo do Personagem (1–20)
                             </Label>
                             <span className="text-xs font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                               Nível {characterLevel}
@@ -1356,287 +1384,61 @@ export default function CharacterCreationWizardPage() {
                             onChange={(e) => handleLevelChange(Number(e.target.value) || 1)}
                             className="bg-slate-900 border-amber-900/50 text-amber-50 font-mono text-base"
                           />
+                          {characterLevel > 1 && (
+                            <div
+                              data-testid="higher-level-creation-notice"
+                              className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2"
+                            >
+                              <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-bold text-amber-300 block">
+                                  Progressão Guiada Nível a Nível ({derivedStats.targetXp.toLocaleString("pt-BR")} XP)
+                                </span>
+                                O personagem será inicializado no Nível 1 de{" "}
+                                <strong>{selectedClass.name}</strong> com o XP necessário para o{" "}
+                                <strong>Nível {characterLevel}</strong>. Ao abrir a ficha, o assistente de{" "}
+                                <strong>Subir de Nível</strong> abrirá automaticamente para você configurar os níveis{" "}
+                                2 até {characterLevel} (incluindo Multiclasse, Subclasses, ASIs e Talentos).
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {/* HP Method & Roll when level > 1 */}
-                        {characterLevel > 1 && (
-                          <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
+                        {/* Career HP Calculation Method (ALWAYS shown so it locks for the character's career) */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
+                          <div>
                             <Label className="text-amber-100 font-serif font-bold text-sm block">
-                              Cálculo de Pontos de Vida (Nível &gt; 1)
+                              Método de Ganho de Pontos de Vida (Carreira: Níveis 2–20)
                             </Label>
-                            <div className="grid grid-cols-3 gap-2">
-                              {(
-                                [
-                                  { id: "MAX", label: "Máximo" },
-                                  { id: "AVERAGE", label: "Média" },
-                                  { id: "ROLLED", label: "Rolado" },
-                                ] as const
-                              ).map((m) => (
-                                <button
-                                  key={m.id}
-                                  type="button"
-                                  onClick={() => setHpMethod(m.id)}
-                                  className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                                    hpMethod === m.id
-                                      ? "border-amber-500 bg-amber-500/20 text-amber-200"
-                                      : "border-amber-900/40 bg-slate-950 text-slate-400"
-                                  }`}
-                                >
-                                  {m.label}
-                                </button>
-                              ))}
-                            </div>
-
-                            {hpMethod === "ROLLED" && (
-                              <div className="pt-2 flex flex-col gap-3">
-                                {secondaryClasses.length === 0 ? (
-                                  // Mono-class HP rolling
-                                  <div className="flex items-center gap-3">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      data-testid="hp-roll-button"
-                                      disabled={
-                                        !selectedClassId ||
-                                        Boolean(activeClassHpRoll) ||
-                                        hpRollMutation.isPending
-                                      }
-                                      onClick={handleRollHp}
-                                      className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      <Dices className="w-4 h-4 mr-1.5" />
-                                      {activeClassHpRoll
-                                        ? "Dados de Vida Rolados"
-                                        : `Rolar Dados de Vida (${selectedClass?.name}) — ${characterLevel - 1}d${(selectedClass?.hitDice ?? "d8").replace(/\D/g, "")}`}
-                                    </Button>
-                                    {activeClassHpRoll && (
-                                      <span className="text-xs font-mono text-amber-300">
-                                        Rolagens: [{activeClassHpRoll.rolledHpPerLevel.join(", ")}]
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  // Multiclass HP rolling per class
-                                  <div className="space-y-2.5 p-3 rounded-lg bg-slate-900/60 border border-amber-900/30">
-                                    <p className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
-                                      Rolagem de PV por Classe (Multiclasse)
-                                    </p>
-                                    {/* Primary class */}
-                                    <div className="flex items-center justify-between gap-3 p-2 rounded bg-slate-950/80 border border-slate-800">
-                                      <div>
-                                        <span className="text-xs font-serif font-bold text-amber-100">
-                                          {selectedClass?.name} (Classe Principal, Nível {primaryClassLevel})
-                                        </span>
-                                      </div>
-                                      {primaryClassLevel > 1 ? (
-                                        <div className="flex items-center gap-2">
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            data-testid="hp-roll-button"
-                                            disabled={
-                                              Boolean(hpRollsByClass[selectedClassId]) ||
-                                              hpRollMutation.isPending
-                                            }
-                                            onClick={() =>
-                                              handleRollHpForClass(
-                                                selectedClassId,
-                                                primaryClassLevel,
-                                                false,
-                                                selectedClass?.name ?? "Principal"
-                                              )
-                                            }
-                                            className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-semibold"
-                                          >
-                                            <Dices className="w-3.5 h-3.5 mr-1" />
-                                            {hpRollsByClass[selectedClassId]
-                                              ? "Rolado"
-                                              : `Rolar ${primaryClassLevel - 1}d${(selectedClass?.hitDice ?? "d8").replace(/\D/g, "")}`}
-                                          </Button>
-                                          {hpRollsByClass[selectedClassId] && (
-                                            <span className="text-xs font-mono text-amber-300">
-                                              [{hpRollsByClass[selectedClassId].rolledHpPerLevel.join(", ")}]
-                                            </span>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <span className="text-xs text-amber-400 font-mono">
-                                          1º nível máximo (sem rolagem)
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Secondary classes */}
-                                    {secondaryClasses.map((sec, sIdx) => {
-                                      const secClass = classes.find((c) => c.id === sec.classId);
-                                      const secRoll = hpRollsByClass[sec.classId];
-                                      const secDieFaces = (secClass?.hitDice ?? "d8").replace(/\D/g, "");
-                                      return (
-                                        <div
-                                          key={sIdx}
-                                          className="flex items-center justify-between gap-3 p-2 rounded bg-slate-950/80 border border-slate-800"
-                                        >
-                                          <span className="text-xs font-serif font-bold text-amber-100">
-                                            {secClass?.name ?? "Secundária"} (Nível {sec.classLevel})
-                                          </span>
-                                          <div className="flex items-center gap-2">
-                                            <Button
-                                              type="button"
-                                              size="sm"
-                                              data-testid={`hp-roll-secondary-${sec.classId}`}
-                                              disabled={
-                                                Boolean(secRoll) ||
-                                                hpRollMutation.isPending
-                                              }
-                                              onClick={() =>
-                                                handleRollHpForClass(
-                                                  sec.classId,
-                                                  sec.classLevel,
-                                                  true,
-                                                  secClass?.name ?? "Secundária"
-                                                )
-                                              }
-                                              className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-semibold"
-                                            >
-                                              <Dices className="w-3.5 h-3.5 mr-1" />
-                                              {secRoll
-                                                ? "Rolado"
-                                                : `Rolar ${sec.classLevel}d${secDieFaces}`}
-                                            </Button>
-                                            {secRoll && (
-                                              <span className="text-xs font-mono text-amber-300">
-                                                [{secRoll.rolledHpPerLevel.join(", ")}]
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                                {!selectedClassId && (
-                                  <p
-                                    data-testid="hp-roll-warning"
-                                    className="text-xs text-amber-400/90 flex items-center gap-1"
-                                  >
-                                    Selecione uma classe primeiro
-                                  </p>
-                                )}
-                              </div>
-                            )}
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              No Nível 1 você sempre recebe o Dado de Vida máximo ({selectedClass.hitDice.toUpperCase()}) + Mod. de Constituição. A escolha abaixo ficará travada para todas as subidas de nível futuras.
+                            </p>
                           </div>
-                        )}
-
-                        {/* Multiclass Distribution when level > 1 */}
-                        {characterLevel > 1 && (
-                          <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-amber-100 font-serif font-bold text-sm">
-                                Distribuição de Classes (Multiclasse)
-                              </Label>
-                              <span
-                                data-testid="multiclass-levels-badge"
-                                className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
-                                  totalClassLevels === characterLevel
-                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                                    : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                          <div className="grid grid-cols-3 gap-2">
+                            {(
+                              [
+                                { id: "AVERAGE", label: "Média Fixa", desc: "Valor fixo por nível" },
+                                { id: "ROLLED", label: "Rolado", desc: "Rolar dado a cada nível" },
+                                { id: "MAX", label: "Máximo", desc: "Dado cheio a cada nível" },
+                              ] as const
+                            ).map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                data-testid={`hp-method-${m.id}`}
+                                onClick={() => setHpMethod(m.id)}
+                                className={`py-2.5 px-3 rounded-lg text-xs font-semibold border transition-all text-left ${
+                                  hpMethod === m.id
+                                    ? "border-amber-500 bg-amber-500/20 text-amber-200"
+                                    : "border-amber-900/40 bg-slate-950 text-slate-400 hover:border-amber-700/40"
                                 }`}
                               >
-                                Soma: {totalClassLevels} / {characterLevel}
-                              </span>
-                            </div>
-
-                            {/* Primary class row */}
-                            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-amber-900/40">
-                              <span className="text-xs font-bold text-amber-200">
-                                {selectedClass.name} (Principal)
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-slate-400">Nível:</span>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={characterLevel}
-                                  value={primaryClassLevel}
-                                  onChange={(e) =>
-                                    setPrimaryClassLevel(Math.max(1, Number(e.target.value) || 1))
-                                  }
-                                  aria-label="Nível da classe principal"
-                                  className="w-16 h-7 text-xs bg-slate-950 border-amber-900/50 text-amber-100 font-mono text-center"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Secondary classes list */}
-                            {secondaryClasses.map((sec, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800"
-                              >
-                                <select
-                                  value={sec.classId}
-                                  onChange={(e) =>
-                                    handleUpdateSecondaryClass(idx, "classId", e.target.value)
-                                  }
-                                  aria-label={`Classe secundária ${idx + 1}`}
-                                  className="bg-slate-950 border border-amber-900/40 rounded px-2 py-1 text-xs text-amber-100 font-serif"
-                                >
-                                  {classes
-                                    .filter(
-                                      (c) =>
-                                        c.id === sec.classId ||
-                                        (c.id !== selectedClassId &&
-                                          !secondaryClasses.some((sc) => sc.classId === c.id))
-                                    )
-                                    .map((c) => (
-                                      <option key={c.id} value={c.id}>
-                                        {c.name}
-                                      </option>
-                                    ))}
-                                </select>
-
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-400">Nível:</span>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={characterLevel - 1}
-                                    value={sec.classLevel}
-                                    onChange={(e) =>
-                                      handleUpdateSecondaryClass(idx, "classLevel", e.target.value)
-                                    }
-                                    aria-label={`Nível da classe secundária ${idx + 1}`}
-                                    className="w-16 h-7 text-xs bg-slate-950 border-amber-900/50 text-amber-100 font-mono text-center"
-                                  />
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    aria-label={`Remover classe secundária ${idx + 1}`}
-                                    onClick={() => handleRemoveSecondaryClass(idx)}
-                                    className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-slate-800"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                              </div>
+                                <div className="font-bold">{m.label}</div>
+                                <div className="text-[10px] opacity-80">{m.desc}</div>
+                              </button>
                             ))}
-
-                            <div className="flex items-center justify-between pt-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleAddSecondaryClass}
-                                disabled={classes.length <= secondaryClasses.length + 1}
-                                className="text-xs border-amber-900/50 bg-slate-950 hover:bg-slate-800 text-amber-200"
-                              >
-                                <Plus className="w-3.5 h-3.5 mr-1" />
-                                Adicionar Classe Secundária
-                              </Button>
-                            </div>
                           </div>
-                        )}
+                        </div>
 
                         {/* Class Skills Selection */}
                         <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-900/30 space-y-3">
@@ -1695,7 +1497,7 @@ export default function CharacterCreationWizardPage() {
                 </CardTitle>
                 <CardDescription className="text-slate-400">
                   Sua história pregressa concede perícias e, em 2024, bônus de
-                  atributo e Talento de Origem.
+                  atributo e 1 Talento de Origem.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1783,20 +1585,50 @@ export default function CharacterCreationWizardPage() {
 
                         {watchedRuleset === "SRD_2024" && (
                           <div className="space-y-4 pt-2 border-t border-amber-900/30">
-                            {selectedBackground.originFeatName && (
-                              <div className="p-3.5 rounded-lg bg-amber-950/30 border border-amber-700/40">
-                                <div className="flex items-center gap-2 text-amber-300 font-serif font-bold text-sm">
-                                  <Sparkles className="w-4 h-4" />
-                                  Talento de Origem:{" "}
-                                  {selectedBackground.originFeatName}
+                            {/* Origin Feat Selector (SRD 2024 + Homebrew ORIGIN) */}
+                            <div className="p-3.5 rounded-lg bg-amber-950/30 border border-amber-700/40 space-y-2.5">
+                              <Label
+                                htmlFor="origin-feat-select"
+                                className="flex items-center gap-2 text-amber-300 font-serif font-bold text-sm"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                                Talento de Origem (SRD 2024)
+                              </Label>
+                              {originFeats.length > 0 ? (
+                                <>
+                                  <select
+                                    id="origin-feat-select"
+                                    data-testid="origin-feat-select"
+                                    value={selectedOriginFeatId}
+                                    onChange={(e) => setSelectedOriginFeatId(e.target.value)}
+                                    className="w-full h-10 px-3 py-2 rounded-lg border border-amber-600/50 bg-slate-950 text-amber-100 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                  >
+                                    {originFeats.map((feat) => (
+                                      <option key={feat.id} value={feat.id}>
+                                        {feat.name}
+                                        {feat.ruleset === "HOMEBREW" ? " [Homebrew]" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {selectedOriginFeat && (
+                                    <p className="text-xs text-slate-300 leading-relaxed">
+                                      {selectedOriginFeat.description}
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <div>
+                                  <div className="text-xs font-semibold text-amber-200">
+                                    {selectedBackground.originFeatName || "Talento de Origem do Antecedente"}
+                                  </div>
+                                  {selectedBackground.originFeatDescription && (
+                                    <p className="text-xs text-slate-300 mt-1">
+                                      {selectedBackground.originFeatDescription}
+                                    </p>
+                                  )}
                                 </div>
-                                {selectedBackground.originFeatDescription && (
-                                  <p className="text-xs text-slate-300 mt-1">
-                                    {selectedBackground.originFeatDescription}
-                                  </p>
-                                )}
-                              </div>
-                            )}
+                              )}
+                            </div>
 
                             {/* 2024 ASI Selector */}
                             <div className="space-y-3">
@@ -2178,18 +2010,11 @@ export default function CharacterCreationWizardPage() {
                       {watchedName || "Aventureiro Sem Nome"}
                     </h3>
                     <p className="text-sm text-slate-300 mt-1">
-                      Nível {characterLevel} • {selectedClass?.name ?? "Classe"}
-                      {secondaryClasses.length > 0 &&
-                        ` (${primaryClassLevel}) / ${secondaryClasses
-                          .map(
-                            (sc) =>
-                              `${
-                                classes.find((c) => c.id === sc.classId)
-                                  ?.name ?? "Classe"
-                              } (${sc.classLevel})`
-                          )
-                          .join(" / ")}`}{" "}
-                      • {selectedLineage?.name ?? "Linhagem"} •{" "}
+                      {characterLevel > 1
+                        ? `Nível 1 (Alvo: Nível ${characterLevel} • ${derivedStats.targetXp.toLocaleString("pt-BR")} XP)`
+                        : "Nível 1"}{" "}
+                      • {selectedClass?.name ?? "Classe"} •{" "}
+                      {selectedLineage?.name ?? "Linhagem"} •{" "}
                       {selectedBackground?.name ?? "Antecedente"}
                     </p>
                   </div>
@@ -2202,7 +2027,7 @@ export default function CharacterCreationWizardPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-xl bg-slate-950/70 border border-amber-900/30 text-center">
                     <span className="text-xs text-slate-400 block">
-                      Pontos de Vida (PV)
+                      PV Inicial (Nv. 1)
                     </span>
                     <span className="text-2xl font-mono font-bold text-red-400">
                       {derivedStats.maxHp}

@@ -9,6 +9,7 @@ import { SearchBar } from '@/components/encyclopedia/search-bar';
 import { ReferenceCard } from '@/components/encyclopedia/reference-card';
 import { ReferenceCardSkeleton } from '@/components/encyclopedia/reference-card-skeleton';
 import { EmptySearchResults } from '@/components/encyclopedia/empty-search-results';
+import { LineageDetailModal } from '@/components/encyclopedia/lineage-detail-modal';
 import { Button } from '@/components/ui/button';
 
 const RULESETS = [
@@ -21,6 +22,8 @@ const RULESETS = [
 export default function LineagesPage() {
   const { isDM } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedLineage, setSelectedLineage] = useState<LineageSummary | null>(null);
+  const [editingLineage, setEditingLineage] = useState<LineageSummary | null>(null);
   const [search, setSearch] = useState('');
   const [ruleset, setRuleset] = useState('ALL');
 
@@ -73,9 +76,19 @@ export default function LineagesPage() {
       </div>
 
       <CreateHomebrewDialog
-        open={createOpen}
+        open={createOpen || !!editingLineage}
         category="lineages"
-        onClose={() => setCreateOpen(false)}
+        editEntity={editingLineage}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditingLineage(null);
+        }}
+      />
+      <LineageDetailModal
+        lineage={selectedLineage}
+        open={!!selectedLineage}
+        onClose={() => setSelectedLineage(null)}
+        onEdit={(lin) => setEditingLineage(lin)}
       />
 
       <div className="space-y-3 bg-card/60 p-4 rounded-xl border border-border/60">
@@ -128,6 +141,7 @@ export default function LineagesPage() {
                 title={lineage.name}
                 badge="Linhagem"
                 ruleset={lineage.ruleset}
+                onClick={() => setSelectedLineage(lineage)}
                 description={lineage.description}
                 metaFields={[
                   { label: 'Deslocamento', value: `${lineage.speed} m` },

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './client';
 import { translateReferenceName } from '@/lib/srd-translations';
+import { ChargeType, ChargeRecoveryType } from './encyclopedia';
 
 export type Ruleset = 'SRD_2014' | 'SRD_2024' | 'HOMEBREW';
 export type AbilityScoreMethod = 'STANDARD_ARRAY' | 'POINT_BUY' | 'ROLLED';
@@ -24,6 +25,7 @@ export interface ReferenceClass {
   weaponProficiencies?: string[];
   spellcastingType: 'NONE' | 'HALF' | 'FULL' | 'PACT' | string;
   spellcastingAbility?: string | null;
+  subclassLevel?: number;
   ruleset: Ruleset;
   source?: string;
 }
@@ -54,17 +56,30 @@ export interface ReferenceBackground {
   source?: string;
 }
 
+export interface CharacterClassSummary {
+  classProgressionId?: string;
+  className: string;
+  subclassName?: string | null;
+  classLevel: number;
+  hitDie?: string;
+  hitDiceSpent?: number;
+  availableHitDice?: number;
+}
+
 export interface CharacterSummary {
   id: string;
   name: string;
   level: number;
   ruleset: Ruleset;
   className: string;
+  subclassName?: string | null;
   lineageName: string;
   backgroundName?: string;
   hitPointsCurrent: number;
   hitPointsMax: number;
   armorClass?: number;
+  avatarUrl?: string | null;
+  classes?: CharacterClassSummary[];
   updatedAt: string;
 }
 
@@ -97,6 +112,74 @@ export interface ClassProgressionPayload {
   classLevel: number;
 }
 
+export interface CharacterItem {
+  id: string;
+  characterId: string;
+  itemId: string;
+  name?: string;
+  itemName?: string;
+  itemCategory: string;
+  itemType: string;
+  rarity: string;
+  requiresAttunement?: boolean;
+  attunement: boolean;
+  cost?: string;
+  weight?: string;
+  description?: string;
+  slug?: string;
+  ruleset?: string;
+  quantity: number;
+  equipped: boolean;
+  attuned: boolean;
+  mechanicalProperties?: any;
+}
+
+export interface CharacterFeat {
+  id: string;
+  characterId: string;
+  featId: string;
+  name: string;
+  description: string;
+  featType: string;
+  unlockedAtLevel: number;
+  currentCharges?: number | null;
+  maxCharges?: number | null;
+  maxChargesType?: ChargeType | null;
+  chargeAbility?: string | null;
+  shortRestRecoveryType?: ChargeRecoveryType | null;
+  shortRestRecoveryFixed?: number | null;
+  longRestRecoveryType?: ChargeRecoveryType | null;
+  longRestRecoveryFixed?: number | null;
+  source: string;
+  mechanicalEffects?: any;
+}
+
+export interface DamageRollItem {
+  diceCount?: number;
+  diceType?: number;
+  diceFormula?: string;
+  damageType: string;
+  bonusModifier?: number;
+  conditional?: boolean;
+  conditionNote?: string | null;
+}
+
+export interface CharacterAction {
+  id?: string;
+  name: string;
+  actionType: 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE' | 'SPECIAL' | string;
+  category?: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | 'CUSTOM' | string;
+  sourceType?: 'WEAPON' | 'SPELL' | 'FEAT' | 'FEATURE' | 'CUSTOM' | string;
+  attackBonus?: number | null;
+  damageRolls?: DamageRollItem[];
+  versatileDice?: string | null;
+  description?: string | null;
+  usesRemaining?: number | null;
+  maxUses?: number | null;
+  currentCharges?: number | null;
+  maxCharges?: number | null;
+}
+
 export interface CharacterResponse {
   id: string;
   userId?: string;
@@ -114,16 +197,48 @@ export interface CharacterResponse {
   hpCalculationMethod?: HpCalculationMethod;
   hasPendingLevelChoices?: boolean;
   notes?: string | null;
+  avatarUrl?: string | null;
+  currency?: {
+    cp: number;
+    sp: number;
+    ep: number;
+    gp: number;
+    pp: number;
+    totalCopper: number;
+    totalGold: number;
+  };
   abilityScores: CharacterAbilityScores;
   lineage: ReferenceLineage;
   background: ReferenceBackground;
   archetype: ReferenceClass;
   classProgressions?: ClassProgression[];
+  classes?: CharacterClassSummary[];
   skillProficiencies?: string[];
   savingThrows?: Record<string, number>;
   skills?: Record<string, number>;
+  experiencePoints?: number;
+  campaignId?: string | null;
+  inventory?: CharacterItem[];
+  feats?: CharacterFeat[];
+  actions?: CharacterAction[];
+  exhaustion?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type CharacterSheet = CharacterResponse;
+
+export type RestType = 'SHORT' | 'LONG';
+
+export interface HitDiceSpendItem {
+  classProgressionId: string;
+  count: number;
+}
+
+export interface RestPayload {
+  restType: RestType;
+  hpHealed?: number;
+  hitDiceSpends?: HitDiceSpendItem[];
 }
 
 export interface CreateCharacterPayload {
@@ -134,6 +249,7 @@ export interface CreateCharacterPayload {
   backgroundId: string;
   archetypeId: string;
   subclassId?: string | null;
+  originFeatId?: string | null;
   abilityScoreMethod: AbilityScoreMethod;
   abilityScores: Record<AbilityKey, number>;
   abilityScoreBonuses?: Record<string, number>;
@@ -144,6 +260,7 @@ export interface CreateCharacterPayload {
   notes?: string;
   classProgressions?: ClassProgressionPayload[];
   skillProficiencies?: string[];
+  avatarUrl?: string | null;
 }
 
 export interface UpdateCharacterPayload {
@@ -151,6 +268,7 @@ export interface UpdateCharacterPayload {
   hitPointsCurrent?: number;
   hitPointsTemp?: number;
   notes?: string;
+  avatarUrl?: string | null;
 }
 
 export interface AbilityRollResponse {
@@ -481,6 +599,28 @@ export function useRollHitPoints() {
   });
 }
 
+export async function takeRest(
+  characterId: string,
+  payload: RestPayload
+): Promise<CharacterResponse> {
+  return apiFetch<CharacterResponse>(`/api/characters/${characterId}/rest`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function useTakeRest(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RestPayload) => takeRest(characterId, payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
+  });
+}
+
 export function useReferenceClasses(ruleset: Ruleset) {
   return useQuery({
     queryKey: ['reference', 'classes', ruleset],
@@ -587,6 +727,217 @@ export function calculatePointBuyTotal(
     const val = scores[key] ?? 8;
     return acc + (POINT_BUY_COSTS[val] ?? 0);
   }, 0);
+}
+
+export interface DndSkillDefinition {
+  id: string;
+  enName: string;
+  ptName: string;
+  ability: AbilityKey;
+}
+
+export const DND_XP_THRESHOLDS = [
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+  85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000
+];
+
+export function getXpProgress(totalXp: number, currentLevel: number): { current: number; max: number; percentage: number; canLevelUp: boolean } {
+  if (currentLevel >= 20) {
+    return { current: totalXp, max: DND_XP_THRESHOLDS[19], percentage: 100, canLevelUp: false };
+  }
+  const currentFloor = DND_XP_THRESHOLDS[currentLevel - 1];
+  const nextTarget = DND_XP_THRESHOLDS[currentLevel];
+  const progressInLevel = Math.max(0, totalXp - currentFloor);
+  const totalLevelSpan = nextTarget - currentFloor;
+  const percentage = Math.min(100, Math.floor((progressInLevel / totalLevelSpan) * 100));
+  return {
+    current: totalXp,
+    max: nextTarget,
+    percentage,
+    canLevelUp: totalXp >= nextTarget,
+  };
+}
+
+export interface AddExperiencePayload {
+  amount: number;
+}
+
+export interface LevelUpPayload {
+  archetypeId: string;
+  subclassId?: string | null;
+  hpCalculationMethod: HpCalculationMethod;
+  hpRollId?: string | null;
+  hpIncrease: number;
+  milestone?: boolean;
+  abilityScoreIncreases?: Record<string, number>;
+  selectedFeatId?: string | null;
+}
+
+export interface RestPayload {
+  restType: 'SHORT' | 'LONG';
+  hpHealed?: number;
+}
+
+export interface AddCharacterItemPayload {
+  itemId: string;
+  quantity: number;
+  purchaseWithCurrency?: boolean;
+}
+
+export interface UpdateCurrencyPayload {
+  cp?: number;
+  sp?: number;
+  ep?: number;
+  gp?: number;
+  pp?: number;
+  consolidate?: boolean;
+}
+
+export interface UpdateCharacterItemPayload {
+  equipped?: boolean;
+  attuned?: boolean;
+  quantity?: number;
+}
+
+export function useAddExperience(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AddExperiencePayload) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/xp`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+    },
+  });
+}
+
+export function useLevelUp(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: LevelUpPayload) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/level-up`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+    },
+  });
+}
+
+export function useRest(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RestPayload) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/rest`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+    },
+  });
+}
+
+export function useUseFeat(characterId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (featId: string) =>
+      apiFetch<CharacterResponse>(`/api/characters/${characterId}/feats/${featId}/use`, {
+        method: 'POST',
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['character', characterId], data);
+      queryClient.setQueryData(['characters', characterId], data);
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+    },
+  });
+}
+
+export function useManageInventory(characterId: string) {
+  const queryClient = useQueryClient();
+  return {
+    addItem: useMutation({
+      mutationFn: (payload: AddCharacterItemPayload) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/items`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+    updateItem: useMutation({
+      mutationFn: ({ itemId, payload }: { itemId: string; payload: UpdateCharacterItemPayload }) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/items/${itemId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        }),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+    removeItem: useMutation({
+      mutationFn: (itemId: string) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/items/${itemId}`, {
+          method: 'DELETE',
+        }),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+    useConsumable: useMutation({
+      mutationFn: (itemId: string) =>
+        apiFetch<any>(`/api/characters/${characterId}/items/${itemId}/use`, {
+          method: 'POST',
+        }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['character', characterId] });
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+    updateCurrency: useMutation({
+      mutationFn: (payload: UpdateCurrencyPayload) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/currency`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        }),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+    useFeat: useMutation({
+      mutationFn: (featId: string) =>
+        apiFetch<CharacterResponse>(`/api/characters/${characterId}/feats/${featId}/use`, {
+          method: 'POST',
+        }),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['character', characterId], data);
+        queryClient.setQueryData(['characters', characterId], data);
+        queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+      },
+    }),
+  };
 }
 
 export interface DndSkillDefinition {

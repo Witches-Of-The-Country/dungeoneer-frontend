@@ -3,14 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ProfilePage from '@/app/profile/page';
 
 const mockUseAuth = vi.fn();
-const mockSelfPromoteToDm = vi.fn();
+const mockToggleDM = vi.fn();
 
 vi.mock('@/lib/hooks/use-auth', () => ({
   useAuth: () => mockUseAuth(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  selfPromoteToDm: () => mockSelfPromoteToDm(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -28,7 +24,7 @@ vi.mock('sonner', () => ({
   },
 }));
 
-describe('ProfilePage Component', () => {
+describe('ProfilePage Component — Active Roles & DM Toggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -39,6 +35,7 @@ describe('ProfilePage Component', () => {
       isAuthenticated: false,
       isLoading: true,
       isDM: false,
+      toggleDM: mockToggleDM,
     });
 
     render(<ProfilePage />);
@@ -51,13 +48,14 @@ describe('ProfilePage Component', () => {
       isAuthenticated: false,
       isLoading: false,
       isDM: false,
+      toggleDM: mockToggleDM,
     });
 
     render(<ProfilePage />);
     expect(screen.getByText(/Acesso Restrito/i)).toBeInTheDocument();
   });
 
-  it('renders user details and promote button when player is not DM', () => {
+  it('renders user details, fixed PLAYER badge, and DM activation toggle when player is not DM', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: '123',
@@ -69,16 +67,21 @@ describe('ProfilePage Component', () => {
       isAuthenticated: true,
       isLoading: false,
       isDM: false,
+      toggleDM: mockToggleDM,
     });
 
     render(<ProfilePage />);
     expect(screen.getByText('Strider')).toBeInTheDocument();
     expect(screen.getByText('aragorn@gondor.com')).toBeInTheDocument();
     expect(screen.getByText('01/01/1990')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Tornar-se Mestre de Jogo/i })).toBeInTheDocument();
+    expect(screen.getByTestId('role-badge-player')).toBeInTheDocument();
+    expect(screen.getByTestId('toggle-dm-role-button')).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      screen.getByRole('button', { name: /Ativar Modo Mestre de Jogo/i })
+    ).toBeInTheDocument();
   });
 
-  it('triggers selfPromoteToDm when clicking the promotion button', async () => {
+  it('triggers toggleDM when clicking the DM role toggle button', async () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: '123',
@@ -90,8 +93,9 @@ describe('ProfilePage Component', () => {
       isAuthenticated: true,
       isLoading: false,
       isDM: false,
+      toggleDM: mockToggleDM,
     });
-    mockSelfPromoteToDm.mockResolvedValueOnce({
+    mockToggleDM.mockResolvedValueOnce({
       accessToken: 'new.jwt.token',
       user: {
         id: '123',
@@ -102,15 +106,15 @@ describe('ProfilePage Component', () => {
     });
 
     render(<ProfilePage />);
-    const promoteButton = screen.getByRole('button', { name: /Tornar-se Mestre de Jogo/i });
-    fireEvent.click(promoteButton);
+    const toggleBtn = screen.getByTestId('toggle-dm-role-button');
+    fireEvent.click(toggleBtn);
 
     await waitFor(() => {
-      expect(mockSelfPromoteToDm).toHaveBeenCalledTimes(1);
+      expect(mockToggleDM).toHaveBeenCalledTimes(1);
     });
   });
 
-  it('does not display promote button when user is already DM', () => {
+  it('displays active DM role toggle and deactivation option when user is already DM', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: '123',
@@ -122,9 +126,13 @@ describe('ProfilePage Component', () => {
       isAuthenticated: true,
       isLoading: false,
       isDM: true,
+      toggleDM: mockToggleDM,
     });
 
     render(<ProfilePage />);
-    expect(screen.queryByRole('button', { name: /Tornar-se Mestre de Jogo/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('toggle-dm-role-button')).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByRole('button', { name: /Desativar Modo Mestre/i })
+    ).toBeInTheDocument();
   });
 });

@@ -188,21 +188,44 @@ export default function CharactersPage() {
               const rulesetLabel =
                 char.ruleset === "SRD_2024" ? "5e 2024" : "5e 2014";
 
+              const classDisplay =
+                char.classes && char.classes.length > 1
+                  ? char.classes
+                      .map(
+                        (c) =>
+                          `${c.className}${c.subclassName ? ` (${c.subclassName})` : ""} ${c.classLevel}`
+                      )
+                      .join(" / ")
+                  : `${char.className}${char.subclassName ? ` (${char.subclassName})` : ""}`;
+
               return (
                 <Card
                   key={char.id}
                   className="bg-slate-900/80 border border-amber-900/40 hover:border-amber-500/60 transition-all duration-300 shadow-xl flex flex-col justify-between group"
                 >
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <CardTitle className="text-xl font-serif text-amber-100 group-hover:text-amber-400 transition-colors">
-                          {char.name}
-                        </CardTitle>
-                        <CardDescription className="text-slate-300 font-medium mt-1">
-                          Nível {char.level} • {char.className} •{" "}
-                          {char.lineageName}
-                        </CardDescription>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {char.avatarUrl ? (
+                          <img
+                            src={char.avatarUrl}
+                            alt={char.name}
+                            className="w-12 h-12 rounded-xl object-cover border border-amber-600/40 shrink-0 shadow-md"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-amber-950/40 border border-amber-800/40 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                            <Shield className="w-6 h-6" />
+                          </div>
+                        )}
+                        <div>
+                          <CardTitle className="text-xl font-serif text-amber-100 group-hover:text-amber-400 transition-colors">
+                            {char.name}
+                          </CardTitle>
+                          <CardDescription className="text-slate-300 font-medium mt-1">
+                            Nível {char.level} • {classDisplay} •{" "}
+                            {char.lineageName}
+                          </CardDescription>
+                        </div>
                       </div>
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
                         {rulesetLabel}

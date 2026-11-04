@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,19 +21,38 @@ import {
   User as UserIcon,
   Sparkles,
   ScrollText,
-  BookOpen,
   Crown,
 } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useAuth } from "@/lib/hooks/use-auth";
 
 export function Navbar() {
-  const { user, isAuthenticated, isLoading, isDM, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, isDM, logout, toggleDM } = useAuth();
+  const [togglingDm, setTogglingDm] = useState(false);
   const router = useRouter();
 
   const handleLogout = () => {
     logout();
     router.push("/login");
+  };
+
+  const handleToggleDm = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (togglingDm) return;
+    setTogglingDm(true);
+    try {
+      const res = await toggleDM();
+      const nowDm = res.user?.roles?.includes("DUNGEON_MASTER");
+      toast.success(
+        nowDm
+          ? "Modo Mestre de Jogo (DM) ativado!"
+          : "Modo Mestre de Jogo (DM) desativado."
+      );
+    } catch {
+      toast.error("Não foi possível alternar o modo Mestre.");
+    } finally {
+      setTogglingDm(false);
+    }
   };
 
   return (
@@ -77,7 +98,15 @@ export function Navbar() {
                     variant="outline"
                     className="flex items-center gap-2 border-primary/30"
                   >
-                    <UserIcon className="w-4 h-4 text-primary" />
+                    {user.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt={user.nickname || "Avatar"}
+                        className="w-5 h-5 rounded-full object-cover border border-primary/50"
+                      />
+                    ) : (
+                      <UserIcon className="w-4 h-4 text-primary" />
+                    )}
                     <span>{user.nickname || user.email}</span>
                     {isDM && (
                       <span className="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
@@ -87,7 +116,7 @@ export function Navbar() {
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-60">
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <div className="flex items-center justify-between">
@@ -106,7 +135,7 @@ export function Navbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                                    <DropdownMenuItem asChild>
+                  <DropdownMenuItem asChild>
                     <Link
                       href="/profile"
                       className="w-full cursor-pointer flex items-center gap-2"
@@ -114,7 +143,27 @@ export function Navbar() {
                       <UserIcon className="w-4 h-4 text-primary" /> Meu Perfil
                     </Link>
                   </DropdownMenuItem>
-<DropdownMenuItem asChild>
+                  <DropdownMenuItem
+                    onClick={handleToggleDm}
+                    disabled={togglingDm}
+                    data-testid="navbar-toggle-dm"
+                    className="w-full cursor-pointer flex items-center justify-between gap-2"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Crown className={`w-4 h-4 ${isDM ? "text-amber-400" : "text-muted-foreground"}`} />
+                      Modo Mestre (DM)
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        isDM
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {togglingDm ? "..." : isDM ? "ATIVO" : "OFF"}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link
                       href="/characters"
                       className="w-full cursor-pointer flex items-center gap-2"
@@ -162,7 +211,7 @@ export function Navbar() {
                 <Menu className="w-6 h-6" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuItem asChild>
                 <Link
                   href="https://github.com/Kevinrehem/Dungeoneer"
@@ -184,7 +233,7 @@ export function Navbar() {
                       </span>
                     )}
                   </DropdownMenuLabel>
-                                    <DropdownMenuItem asChild>
+                  <DropdownMenuItem asChild>
                     <Link
                       href="/profile"
                       className="w-full cursor-pointer flex items-center gap-2"
@@ -192,7 +241,26 @@ export function Navbar() {
                       <UserIcon className="w-4 h-4 text-primary" /> Meu Perfil
                     </Link>
                   </DropdownMenuItem>
-<DropdownMenuItem asChild>
+                  <DropdownMenuItem
+                    onClick={handleToggleDm}
+                    disabled={togglingDm}
+                    className="w-full cursor-pointer flex items-center justify-between gap-2"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Crown className={`w-4 h-4 ${isDM ? "text-amber-400" : "text-muted-foreground"}`} />
+                      Modo Mestre (DM)
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        isDM
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {togglingDm ? "..." : isDM ? "ATIVO" : "OFF"}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link
                       href="/characters"
                       className="w-full cursor-pointer flex items-center gap-2"

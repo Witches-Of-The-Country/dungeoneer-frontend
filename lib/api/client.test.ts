@@ -27,6 +27,42 @@ describe('API Client & RFC 7807 ProblemDetail parser', () => {
       title: 'Conflict',
     });
     expect(msgDefault409).toContain('Conflito');
+
+    const msgSpringBoot500 = formatProblemDetailMessage({
+      status: 500,
+      title: 'Internal Server Error',
+      detail: 'Internal Server Error (/api/reference/items)',
+      instance: '/api/reference/items',
+    });
+    expect(msgSpringBoot500).toContain('Erro interno no servidor ao processar /api/reference/items');
+
+    const msgFeatConflict = formatProblemDetailMessage({
+      status: 409,
+      title: 'Conflito de Integridade de Dados',
+      detail: 'duplicate key value violates unique constraint "uq_character_feat"',
+    });
+    expect(msgFeatConflict).toContain('Este personagem já possui o talento selecionado.');
+  });
+
+  it('correctly extracts spring boot error and path when apiFetch fails with 500', async () => {
+    const errorPayload = {
+      timestamp: '2026-11-01T04:24:49.085Z',
+      status: 500,
+      error: 'Internal Server Error',
+      path: '/api/reference/items',
+    };
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(errorPayload), {
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await expect(apiFetch('/api/reference/items')).rejects.toThrow(
+      'Erro interno no servidor ao processar /api/reference/items. Tente novamente mais tarde.'
+    );
   });
 
   it('attaches Authorization Bearer token when stored in localStorage', async () => {

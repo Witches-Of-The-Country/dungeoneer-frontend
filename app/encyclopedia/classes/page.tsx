@@ -9,6 +9,7 @@ import { SearchBar } from '@/components/encyclopedia/search-bar';
 import { ReferenceCard } from '@/components/encyclopedia/reference-card';
 import { ReferenceCardSkeleton } from '@/components/encyclopedia/reference-card-skeleton';
 import { EmptySearchResults } from '@/components/encyclopedia/empty-search-results';
+import { ClassDetailModal } from '@/components/encyclopedia/class-detail-modal';
 import { Button } from '@/components/ui/button';
 
 const RULESETS = [
@@ -21,6 +22,8 @@ const RULESETS = [
 export default function ClassesPage() {
   const { isDM } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ArchetypeSummary | null>(null);
+  const [editingClass, setEditingClass] = useState<ArchetypeSummary | null>(null);
   const [search, setSearch] = useState('');
   const [ruleset, setRuleset] = useState('ALL');
 
@@ -56,7 +59,7 @@ export default function ClassesPage() {
             Classes &amp; Arquétipos
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Explore as classes fundamentais e arquétipos pelo SRD 2014, 2024 e Homebrew.
+            Explore as classes fundamentais e arquétipos pelo SRD 2014, 2024 e Homebrew. Clique em uma classe para ver a tabela completa do Nível 1 ao 20 e suas Subclasses.
           </p>
         </div>
 
@@ -73,9 +76,20 @@ export default function ClassesPage() {
       </div>
 
       <CreateHomebrewDialog
-        open={createOpen}
+        open={createOpen || !!editingClass}
         category="classes"
-        onClose={() => setCreateOpen(false)}
+        editEntity={editingClass}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditingClass(null);
+        }}
+      />
+
+      <ClassDetailModal
+        archetype={selectedClass}
+        open={Boolean(selectedClass)}
+        onClose={() => setSelectedClass(null)}
+        onEdit={(cls) => setEditingClass(cls)}
       />
 
       <div className="space-y-3 bg-card/60 p-4 rounded-xl border border-border/60">
@@ -126,11 +140,13 @@ export default function ClassesPage() {
               <ReferenceCard
                 key={`${cls.ruleset}-${cls.id}`}
                 title={cls.name}
-                badge="Classe"
+                badge="Ver Progressão 1–20"
                 ruleset={cls.ruleset}
+                onClick={() => setSelectedClass(cls)}
                 metaFields={[
                   { label: 'Dado de Vida', value: cls.hitDice },
                   { label: 'Atributo Primário', value: cls.primaryAbility },
+                  { label: 'Subclasse', value: `Nível ${cls.subclassLevel ?? 3}` },
                   { label: 'Origem', value: cls.source },
                 ]}
               />

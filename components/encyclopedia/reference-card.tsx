@@ -15,6 +15,7 @@ export interface ReferenceCardProps {
   description?: string;
   metaFields?: Array<{ label: string; value: string | number | undefined | null }>;
   extraBadges?: string[];
+  onClick?: () => void;
 }
 
 export function ReferenceCard({
@@ -26,6 +27,7 @@ export function ReferenceCard({
   description,
   metaFields = [],
   extraBadges = [],
+  onClick,
 }: ReferenceCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -44,7 +46,24 @@ export function ReferenceCard({
       : 'border-amber-500/40 text-amber-400 bg-amber-950/20';
 
   return (
-    <Card className="flex flex-col justify-between border-border/60 bg-card hover:border-accent/40 transition-colors shadow-sm">
+    <Card
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={`flex flex-col justify-between border-border/60 bg-card hover:border-accent/40 transition-all shadow-sm ${
+        onClick ? 'cursor-pointer hover:ring-1 hover:ring-amber-500/40 hover:bg-card/90' : ''
+      }`}
+    >
       <CardHeader className="p-5 pb-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-0.5">

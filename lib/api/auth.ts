@@ -6,6 +6,7 @@ export interface UserProfile {
   nickname: string;
   birthdate?: string;
   roles?: string[];
+  avatarUrl?: string | null;
 }
 
 export interface AuthResponse {
@@ -157,6 +158,28 @@ export async function selfPromoteToDm(): Promise<AuthResponse> {
     method: 'POST',
   });
   persistAuthSession(response);
+  return response;
+}
+
+export async function toggleDmRole(): Promise<AuthResponse> {
+  const response = await apiFetch<AuthResponse>('/api/auth/me/roles/toggle-dm', {
+    method: 'POST',
+  });
+  persistAuthSession(response);
+  return response;
+}
+
+export async function updateAvatar(avatarUrl: string): Promise<UserProfile> {
+  const response = await apiFetch<UserProfile>('/api/auth/me/avatar', {
+    method: 'PUT',
+    body: JSON.stringify({ avatarUrl }),
+  });
+  const storedUser = getUser();
+  if (storedUser && typeof window !== 'undefined') {
+    const updated = { ...storedUser, avatarUrl: response.avatarUrl };
+    window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new Event('auth-state-change'));
+  }
   return response;
 }
 

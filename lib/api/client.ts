@@ -62,7 +62,7 @@ export function formatProblemDetailMessage(problem: ProblemDetail): string {
   }
 
   if (problem.detail && problem.detail.trim().length > 0) {
-    return translateCommonBackendDetail(problem.detail, problem.status);
+    return translateCommonBackendDetail(problem.detail, problem.status, problem.instance);
   }
 
   if (
@@ -72,7 +72,8 @@ export function formatProblemDetailMessage(problem: ProblemDetail): string {
     problem.title !== 'Conflict' &&
     problem.title !== 'Unprocessable Entity' &&
     problem.title !== 'Not Found' &&
-    problem.title !== 'Unauthorized'
+    problem.title !== 'Unauthorized' &&
+    problem.title !== 'Internal Server Error'
   ) {
     return problem.title;
   }
@@ -83,7 +84,7 @@ export function formatProblemDetailMessage(problem: ProblemDetail): string {
   );
 }
 
-function translateCommonBackendDetail(detail: string, status: number): string {
+function translateCommonBackendDetail(detail: string, status: number, instance?: string): string {
   const lower = detail.toLowerCase();
   if (lower.includes('already rolled') || lower.includes('roll already exists') || lower.includes('already consumed')) {
     return 'A rolagem de atributos já foi realizada para esta criação de personagem.';
@@ -99,6 +100,13 @@ function translateCommonBackendDetail(detail: string, status: number): string {
   }
   if (status === 401 && lower.includes('unauthorized')) {
     return DEFAULT_PT_BR_MESSAGES[401];
+  }
+  if (lower.includes('uq_character_feat') || (lower.includes('duplicate') && lower.includes('character_feat'))) {
+    return 'Este personagem já possui o talento selecionado.';
+  }
+  if (lower.includes('internal server error') && (lower.includes('/api/') || instance)) {
+    const path = instance || (detail.includes('(') ? detail.slice(detail.indexOf('(') + 1, detail.indexOf(')')) : '');
+    return `Erro interno no servidor ao processar ${path || 'a requisição'}. Tente novamente mais tarde.`;
   }
   return detail;
 }
@@ -182,12 +190,19 @@ export async function apiFetch<T = unknown>(
       const text = await response.text();
       if (text) {
         const parsed = JSON.parse(text);
+        const fallbackDetail =
+          parsed.detail ??
+          parsed.message ??
+          (parsed.error && parsed.path
+            ? `${parsed.error} (${parsed.path})`
+            : parsed.error);
+
         problem = {
           status: parsed.status ?? response.status,
           title: parsed.title ?? response.statusText,
-          detail: parsed.detail ?? parsed.message,
+          detail: fallbackDetail,
           type: parsed.type,
-          instance: parsed.instance,
+          instance: parsed.instance ?? parsed.path,
           errors: parsed.errors ?? parsed.fieldErrors,
         };
       }
