@@ -22,9 +22,13 @@ const fontMono = Fira_Code({
 export const metadata: Metadata = {
   title: "Dungeoneer - Gerenciador de Campanhas e Fichas de D&D",
   description: "Gerencie suas campanhas, NPCs e fichas de personagens de Dungeons & Dragons com facilidade.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { Providers } from "@/components/providers";
 import { Navbar } from "@/components/navbar";
 
 export default function RootLayout({
@@ -33,16 +37,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning>
       <body className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >
-          <Navbar />
-          {children}
+          <Providers>
+            <Navbar />
+            {children}
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Eye, EyeOff, Lock, Mail, User, Shield, Sword } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,22 +28,32 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { register } from "@/lib/api/auth";
+import { useAuth } from "@/lib/hooks/use-auth";
 
-const registerSchema = z.object({
+export const registerSchema = z.object({
   email: z.string().email("Email inválido."),
-  nick: z.string().min(1, "Nickname é obrigatório."),
+  nick: z
+    .string()
+    .min(3, "Alcunha deve ter pelo menos 3 caracteres.")
+    .max(50, "Máximo de 50 caracteres."),
   birthdate: z.string().min(1, "Data de nascimento é obrigatória."),
   modules: z.array(z.string()).min(1, "Selecione pelo menos um módulo."),
-  password: z
-    .string()
-    .min(10, "A senha deve ter pelo menos 10 caracteres.")
-    .regex(/[a-zA-Z]/, "A senha deve conter pelo menos uma letra.")
-    .regex(/[0-9]/, "A senha deve conter pelo menos um número.")
-    .regex(/[^a-zA-Z0-9]/, "A senha deve conter pelo menos um símbolo especial."),
+  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres."),
 });
 
 export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/characters");
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
@@ -49,14 +61,42 @@ export function RegisterForm() {
       email: "",
       nick: "",
       birthdate: "",
-      modules: [],
+      modules: ["player"],
       password: "",
     },
   });
 
-  function onSubmit(values: z.infer<typeof registerSchema>) {
-    // Implementação futura do envio
-    console.log(values);
+  async function onSubmit(values: z.infer<typeof registerSchema>) {
+    setServerError(null);
+    setLoading(true);
+
+    try {
+      const roles: string[] = [];
+      if (values.modules.includes("player")) {
+        roles.push("PLAYER");
+      }
+      if (values.modules.includes("dm")) {
+        roles.push("DUNGEON_MASTER");
+      }
+
+      await register({
+        email: values.email,
+        nickname: values.nick,
+        birthdate: values.birthdate,
+        password: values.password,
+        roles: roles.length > 0 ? roles : ["PLAYER"],
+      });
+      toast.success("Cadastro realizado com sucesso! Bem-vindo à Guilda.");
+      router.push("/characters");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setServerError(err.message);
+      } else {
+        setServerError("Erro ao forjar destino na Guilda.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -71,6 +111,11 @@ export function RegisterForm() {
         </CardDescription>
       </CardHeader>
       <CardContent className="relative z-10">
+        {serverError && (
+          <div className="mb-6 p-3 text-sm rounded bg-destructive/15 text-destructive border border-destructive/30">
+            {serverError}
+          </div>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
@@ -78,7 +123,9 @@ export function RegisterForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-foreground font-medium">Email Místico</FormLabel>
+                  <FormLabel className="text-foreground font-medium">
+                    Email Místico
+                  </FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -100,7 +147,9 @@ export function RegisterForm() {
                 name="nick"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground font-medium">Alcunha (Nick)</FormLabel>
+                    <FormLabel className="text-foreground font-medium">
+                      Alcunha (Nick)
+                    </FormLabel>
                     <FormControl>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -120,7 +169,9 @@ export function RegisterForm() {
                 name="birthdate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-foreground font-medium">Data de Nascimento</FormLabel>
+                    <FormLabel className="text-foreground font-medium">
+                      Data de Nascimento
+                    </FormLabel>
                     <FormControl>
                       <Input
                         type="date"
@@ -139,7 +190,9 @@ export function RegisterForm() {
               name="modules"
               render={({ field }) => (
                 <FormItem className="space-y-3">
-                  <FormLabel className="text-foreground font-medium">Caminho da Guilda</FormLabel>
+                  <FormLabel className="text-foreground font-medium">
+                    Caminho da Guilda
+                  </FormLabel>
                   <FormDescription className="text-xs">
                     Como você trilhará sua jornada? (Selecione pelo menos um)
                   </FormDescription>
@@ -157,8 +210,12 @@ export function RegisterForm() {
                       >
                         <Sword className="h-6 w-6 text-foreground" />
                         <div className="text-center space-y-1">
-                          <span className="block font-medium text-foreground">Jogador</span>
-                          <span className="block text-xs text-muted-foreground whitespace-normal">Desbrave masmorras</span>
+                          <span className="block font-medium text-foreground">
+                            Jogador
+                          </span>
+                          <span className="block text-xs text-muted-foreground whitespace-normal">
+                            Desbrave masmorras
+                          </span>
                         </div>
                       </ToggleGroupItem>
 
@@ -169,8 +226,12 @@ export function RegisterForm() {
                       >
                         <Shield className="h-6 w-6 text-foreground" />
                         <div className="text-center space-y-1">
-                          <span className="block font-medium text-foreground">Mestre</span>
-                          <span className="block text-xs text-muted-foreground whitespace-normal">Crie mundos</span>
+                          <span className="block font-medium text-foreground">
+                            Mestre
+                          </span>
+                          <span className="block text-xs text-muted-foreground whitespace-normal">
+                            Crie mundos
+                          </span>
                         </div>
                       </ToggleGroupItem>
                     </ToggleGroup>
@@ -185,13 +246,15 @@ export function RegisterForm() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-foreground font-medium">Palavra-Passe</FormLabel>
+                  <FormLabel className="text-foreground font-medium">
+                    Palavra-Passe
+                  </FormLabel>
                   <FormControl>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         type={showPassword ? "text" : "password"}
-                        placeholder="••••••••••"
+                        placeholder="••••••••"
                         className="pl-10 pr-10 bg-background/50 border-border/50 focus-visible:ring-primary focus-visible:border-primary transition-all placeholder:text-muted-foreground/60"
                         {...field}
                       />
@@ -201,7 +264,11 @@ export function RegisterForm() {
                         className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
                         aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
                       </button>
                     </div>
                   </FormControl>
@@ -209,9 +276,13 @@ export function RegisterForm() {
                 </FormItem>
               )}
             />
-            
-            <Button type="submit" className="w-full mt-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]">
-              Forjar Destino
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {loading ? "Forjando Destino..." : "Forjar Destino"}
             </Button>
           </form>
         </Form>
