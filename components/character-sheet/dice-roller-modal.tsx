@@ -39,6 +39,7 @@ interface DiceRollerModalProps {
   versatileDice?: string | null;
   isHealing?: boolean;
   onApplyHealing?: (amount: number) => void;
+  onConsumeCharge?: () => void;
 }
 
 interface DamagePartBreakdown {
@@ -61,6 +62,7 @@ export function DiceRollerModal({
   versatileDice,
   isHealing,
   onApplyHealing,
+  onConsumeCharge,
 }: DiceRollerModalProps) {
   const isAdvantage =
     (damageFormula && damageFormula.toLowerCase().includes('2d20kh1')) ||
@@ -70,6 +72,14 @@ export function DiceRollerModal({
   const [d20Rolls, setD20Rolls] = useState<number[] | null>(null);
   const [effectResult, setEffectResult] = useState<number | null>(null);
   const [breakdownParts, setBreakdownParts] = useState<DamagePartBreakdown[] | null>(null);
+  const [chargeConsumed, setChargeConsumed] = useState<boolean>(false);
+
+  const consumeChargeOnce = () => {
+    if (!isHealing && onConsumeCharge && !chargeConsumed) {
+      setChargeConsumed(true);
+      onConsumeCharge();
+    }
+  };
 
   // Options
   const [useVersatile, setUseVersatile] = useState<boolean>(false);
@@ -87,6 +97,7 @@ export function DiceRollerModal({
   };
 
   const rollAttack = () => {
+    consumeChargeOnce();
     if (isAdvantage) {
       const d1 = Math.floor(Math.random() * 20) + 1;
       const d2 = Math.floor(Math.random() * 20) + 1;
@@ -117,6 +128,7 @@ export function DiceRollerModal({
   };
 
   const rollEffect = () => {
+    consumeChargeOnce();
     if (damageRolls && damageRolls.length > 0) {
       const parts: DamagePartBreakdown[] = [];
       let grandTotal = 0;

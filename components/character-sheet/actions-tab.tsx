@@ -255,7 +255,7 @@ export function ActionsTab({ character }: ActionsTabProps) {
                       </Badge>
                     ) : null}
 
-                    {act.id && act.category === 'FEAT' && !isRollable && maxCharges && (currentCharges ?? maxCharges) > 0 && (
+                    {act.id && act.category === 'FEAT' && maxCharges && (currentCharges ?? maxCharges) > 0 && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -532,6 +532,15 @@ export function ActionsTab({ character }: ActionsTabProps) {
           versatileDice={activeRoll.versatileDice}
           isHealing={activeRoll.isHealing}
           onApplyHealing={handleApplyHealing}
+          onConsumeCharge={
+            activeRoll.actionId && activeRoll.category === 'FEAT'
+              ? () => {
+                  useFeatMutation.mutate(activeRoll.actionId!, {
+                    onSuccess: () => toast.success(`1 uso de ${activeRoll.title} consumido.`),
+                  });
+                }
+              : undefined
+          }
         />
       )}
     </div>
