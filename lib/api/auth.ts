@@ -145,13 +145,13 @@ function persistAuthSession(data: AuthResponse) {
   inMemoryToken = data.accessToken;
   const userJson = JSON.stringify(data.user);
 
-  // Eliminate JWT storage in localStorage and client document.cookie (SEC-HIGH-02)
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
-  window.localStorage.removeItem('dungeoneer_token');
-  deleteCookie(AUTH_TOKEN_KEY);
-  deleteCookie('dungeoneer_token');
+  // Persist JWT token in localStorage and cookies for Next.js edge middleware and session rehydration
+  window.localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+  window.localStorage.setItem('dungeoneer_token', data.accessToken);
+  setCookie(AUTH_TOKEN_KEY, data.accessToken);
+  setCookie('dungeoneer_token', data.accessToken);
 
-  // Persist only non-sensitive user profile for UI rendering
+  // Persist user profile for UI rendering
   window.localStorage.setItem(AUTH_USER_KEY, userJson);
   window.localStorage.setItem('dungeoneer_user', userJson);
   setCookie(AUTH_USER_KEY, userJson);
@@ -204,7 +204,23 @@ export function getToken(): string | null {
     }
     return inMemoryToken;
   }
-  return null;
+  if (typeof window === 'undefined') return null;
+  const token =
+    getCookie(AUTH_TOKEN_KEY) ||
+    getCookie('dungeoneer_token') ||
+    window.localStorage.getItem(AUTH_TOKEN_KEY) ||
+    window.localStorage.getItem('dungeoneer_token');
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    inMemoryToken = null;
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.localStorage.removeItem('dungeoneer_token');
+    deleteCookie(AUTH_TOKEN_KEY);
+    deleteCookie('dungeoneer_token');
+    return null;
+  }
+  inMemoryToken = token;
+  return token;
 }
 
 export const getAccessToken = getToken;

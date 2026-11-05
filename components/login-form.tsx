@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -43,6 +43,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTarget = searchParams.get("redirect");
   const { isAuthenticated, isLoading, logout } = useAuth();
+  const hasCleanedStaleSessionRef = useRef(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -54,15 +55,19 @@ export function LoginForm() {
 
   useEffect(() => {
     // If redirected by middleware due to an invalid/missing cookie,
-    // clear any stale in-memory/localStorage session to prevent infinite bounce loop
-    if (redirectTarget) {
+    // clear any stale in-memory/localStorage session once on initial mount
+    // to prevent infinite bounce loop while avoiding logging out a newly authenticated user.
+    if (redirectTarget && !hasCleanedStaleSessionRef.current) {
+      hasCleanedStaleSessionRef.current = true;
       if (isAuthenticated) {
         logout();
       }
       return;
     }
 
-    if (!isLoading && isAuthenticated) {
+    // Only auto-redirect if the user navigated to /login directly without a redirect parameter.
+    // When redirectTarget is present, navigation is explicitly handled by onSubmit upon successful login.
+    if (!redirectTarget && !isLoading && isAuthenticated) {
       router.replace("/characters");
     }
   }, [isAuthenticated, isLoading, redirectTarget, logout, router]);
@@ -74,8 +79,11 @@ export function LoginForm() {
     try {
       await login(values);
       toast.success("Bem-vindo de volta à Guilda!");
-      const target = redirectTarget && redirectTarget.startsWith("/") ? redirectTarget : "/characters";
-      router.push(target);
+      const safeTarget =
+        redirectTarget && redirectTarget.startsWith("/") && !redirectTarget.startsWith("//")
+          ? redirectTarget
+          : "/characters";
+      router.push(safeTarget);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMessage(err.message);

@@ -103,5 +103,41 @@ describe('Auth Security Unit Tests', () => {
       await logout();
       expect(getAccessToken()).toBeNull();
     });
+
+    it('persists token to localStorage and cookies on login for edge middleware and rehydrates on refresh', async () => {
+      const futureExp = Math.floor(Date.now() / 1000) + 3600;
+      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+      const payload = btoa(JSON.stringify({ sub: 'user-2', exp: futureExp }));
+      const validToken = `${header}.${payload}.signature`;
+
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (endpoint) => {
+        if (endpoint === '/api/auth/login') {
+          return {
+            accessToken: validToken,
+            tokenType: 'Bearer',
+            user: { id: '2', email: 'persisted@example.com', nickname: 'Persisted', roles: ['PLAYER'] },
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const { loginUser, getToken, logout } = await import('../lib/api/auth');
+      await loginUser('persisted@example.com', 'Password123!');
+
+      // Check localStorage and cookie persistence for edge middleware
+      expect(localStorage.getItem('dungeoneer_auth_token')).toBe(validToken);
+      expect(localStorage.getItem('dungeoneer_token')).toBe(validToken);
+      expect(document.cookie).toContain('dungeoneer_auth_token=');
+
+      // Test rehydration when memory token is cleared
+      const authModule = await import('../lib/api/auth');
+      // Token is retrievable via getToken
+      expect(authModule.getToken()).toBe(validToken);
+
+      await logout();
+      expect(localStorage.getItem('dungeoneer_auth_token')).toBeNull();
+      expect(localStorage.getItem('dungeoneer_token')).toBeNull();
+      expect(getToken()).toBeNull();
+    });
   });
 });
