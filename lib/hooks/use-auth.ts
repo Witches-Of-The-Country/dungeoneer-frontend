@@ -27,9 +27,11 @@ export function useAuth() {
   }, [syncAuth]);
 
   // Session guard: verify session integrity against backend on mount
+  // or rehydrate session on page refresh when user profile exists
   useEffect(() => {
     const currentToken = getStoredToken();
-    if (!currentToken) return;
+    const storedUser = getStoredUser();
+    if (!currentToken && !storedUser) return;
 
     let isMounted = true;
     setIsLoading(true);

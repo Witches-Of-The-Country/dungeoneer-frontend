@@ -121,7 +121,17 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+let tokenProvider: (() => string | null) | null = null;
+
+export function setTokenProvider(provider: () => string | null) {
+  tokenProvider = provider;
+}
+
 export function getStoredToken(): string | null {
+  if (tokenProvider) {
+    const token = tokenProvider();
+    if (token) return token;
+  }
   if (typeof window === 'undefined') return null;
   try {
     return (
@@ -168,6 +178,7 @@ export async function apiFetch<T = unknown>(
   let response: Response;
   try {
     response = await fetch(url, {
+      credentials: 'include',
       ...rest,
       headers: requestHeaders,
     });

@@ -1,4 +1,4 @@
-import { apiFetch, AUTH_TOKEN_KEY, AUTH_USER_KEY } from './client';
+import { apiFetch, AUTH_TOKEN_KEY, AUTH_USER_KEY, setTokenProvider } from './client';
 
 export interface UserProfile {
   id: string;
@@ -207,7 +207,12 @@ export function getToken(): string | null {
   return null;
 }
 
+export const getAccessToken = getToken;
 export const getStoredToken = getToken;
+
+if (typeof window !== 'undefined') {
+  setTokenProvider(getAccessToken);
+}
 
 export function getUser(): UserProfile | null {
   if (typeof window === 'undefined') return null;

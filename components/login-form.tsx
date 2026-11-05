@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -40,7 +40,9 @@ export function LoginForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const redirectTarget = searchParams.get("redirect");
+  const { isAuthenticated, isLoading, logout } = useAuth();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -51,10 +53,19 @@ export function LoginForm() {
   });
 
   useEffect(() => {
+    // If redirected by middleware due to an invalid/missing cookie,
+    // clear any stale in-memory/localStorage session to prevent infinite bounce loop
+    if (redirectTarget) {
+      if (isAuthenticated) {
+        logout();
+      }
+      return;
+    }
+
     if (!isLoading && isAuthenticated) {
       router.replace("/characters");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, redirectTarget, logout, router]);
 
   async function onSubmit(values: LoginFormValues) {
     setErrorMessage(null);
@@ -63,7 +74,8 @@ export function LoginForm() {
     try {
       await login(values);
       toast.success("Bem-vindo de volta à Guilda!");
-      router.push("/characters");
+      const target = redirectTarget && redirectTarget.startsWith("/") ? redirectTarget : "/characters";
+      router.push(target);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMessage(err.message);

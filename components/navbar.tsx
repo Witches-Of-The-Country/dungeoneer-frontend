@@ -30,6 +30,7 @@ export function Navbar() {
   const { user, isAuthenticated, isLoading, isDM, logout, toggleDM } = useAuth();
   const [togglingDm, setTogglingDm] = useState(false);
   const router = useRouter();
+  const logoHref = !isLoading && isAuthenticated ? "/characters" : "/";
 
   const handleLogout = () => {
     logout();
@@ -59,7 +60,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-md shadow-sm">
       <div className="container mx-auto py-2 md:py-2.5 px-4 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Link href="/" className="flex items-center">
+          <Link href={logoHref} className="flex items-center">
             <Image
               src="/logo.png"
               alt="Dungeoneer"

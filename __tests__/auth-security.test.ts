@@ -59,4 +59,49 @@ describe('Auth Security Unit Tests', () => {
       expect(localStorage.getItem('dungeoneer_token')).toBeNull();
     });
   });
+
+  describe('Spec 001 - Token Unification & Loop Prevention', () => {
+    it('unifies in-memory token with getStoredToken and apiFetch uses Bearer + credentials: include', async () => {
+      const futureExp = Math.floor(Date.now() / 1000) + 3600;
+      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+      const payload = btoa(JSON.stringify({ sub: 'user-1', exp: futureExp }));
+      const validToken = `${header}.${payload}.signature`;
+
+      const apiFetchMock = vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (endpoint) => {
+        if (endpoint === '/api/auth/login') {
+          return {
+            accessToken: validToken,
+            tokenType: 'Bearer',
+            user: { id: '1', email: 'test@example.com', nickname: 'Tester', roles: ['PLAYER'] },
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const { loginUser, getAccessToken } = await import('../lib/api/auth');
+      await loginUser('test@example.com', 'Password123!');
+
+      expect(getAccessToken()).toBe(validToken);
+      expect(clientModule.getStoredToken()).toBe(validToken);
+
+      // Restore apiFetch spy before calling real apiFetch
+      apiFetchMock.mockRestore();
+
+      // Verify credentials: 'include'
+      let capturedCredentials: any;
+      let capturedHeaders: Headers | undefined;
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+        capturedCredentials = init?.credentials;
+        capturedHeaders = init?.headers as Headers;
+        return new Response(JSON.stringify({ data: 'ok' }), { status: 200 });
+      });
+
+      await clientModule.apiFetch('/api/characters');
+      expect(capturedCredentials).toBe('include');
+      expect(capturedHeaders?.get('Authorization')).toBe(`Bearer ${validToken}`);
+
+      await logout();
+      expect(getAccessToken()).toBeNull();
+    });
+  });
 });

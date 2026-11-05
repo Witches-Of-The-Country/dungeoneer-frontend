@@ -30,7 +30,11 @@ export function middleware(request: NextRequest) {
   if (isProtected && !isJwtValidAndNotExpired(token)) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    const response = NextResponse.redirect(loginUrl);
+    // Clear malformed or expired cookies to avoid state desync with client
+    response.cookies.delete('dungeoneer_auth_token');
+    response.cookies.delete('dungeoneer_token');
+    return response;
   }
 
   return NextResponse.next();
