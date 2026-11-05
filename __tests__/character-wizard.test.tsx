@@ -309,4 +309,71 @@ describe('TP-01: 6-Step Character Creation Wizard', () => {
       }
     });
   });
+
+  it('TR-04: allows clearing and typing 20 in the level input without premature clamping', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('/api/reference/lineages')) {
+        return [
+          {
+            id: 'lin-1',
+            name: 'Anão',
+            description: 'Robusto e resiliente.',
+            speed: 25,
+            size: 'MEDIUM',
+            abilityBonuses: { CON: 2 },
+            traitsSummary: ['Visão no Escuro'],
+            ruleset: 'SRD_2024',
+          },
+        ];
+      }
+      if (endpoint.startsWith('/api/reference/classes')) {
+        return [
+          {
+            id: 'cls-1',
+            name: 'Guerreiro',
+            hitDice: 'd10',
+            primaryAbility: 'STRENGTH',
+            savingThrowProficiencies: ['STRENGTH', 'CONSTITUTION'],
+            spellcastingType: 'NONE',
+            ruleset: 'SRD_2024',
+          },
+        ];
+      }
+      return [];
+    });
+
+    renderWithQuery(<CharacterCreationWizardPage />);
+
+    // Step 1: Nome
+    const nameInput = screen.getByLabelText(/Nome do Personagem/i);
+    fireEvent.change(nameInput, { target: { value: 'Arthas' } });
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+
+    // Step 2: Linhagem
+    await waitFor(() => {
+      expect(screen.getByText(/Passo 2 — Linhagem/i)).toBeInTheDocument();
+    });
+    expect(await screen.findAllByText('Anão')).not.toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+
+    // Step 3: Classe & Nível
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Nível Alvo do Personagem/i)).toBeInTheDocument()
+    );
+    const levelInput = screen.getByLabelText(/Nível Alvo do Personagem/i);
+    expect(levelInput).toHaveValue(1);
+
+    // Clear the field (backspace) -> must become empty and NOT clamp back to 1
+    fireEvent.change(levelInput, { target: { value: '' } });
+    expect(levelInput).toHaveValue(null);
+
+    // Type '20'
+    fireEvent.change(levelInput, { target: { value: '20' } });
+    expect(levelInput).toHaveValue(20);
+
+    // Blur -> remains 20
+    fireEvent.blur(levelInput);
+    expect(levelInput).toHaveValue(20);
+    expect(screen.getAllByText(/Nível 20/i)[0]).toBeInTheDocument();
+  });
 });

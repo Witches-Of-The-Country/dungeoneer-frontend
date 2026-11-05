@@ -192,4 +192,80 @@ describe('TP-03: Character List, Delete Confirmation Modal & Edit Page', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/characters/char-202');
   });
+
+  it('allows rerolling ability scores when character is not bound to a campaign', async () => {
+    const existingChar: Partial<CharacterResponse> = {
+      id: 'char-202',
+      name: 'Boromir de Gondor',
+      level: 5,
+      campaignId: null,
+      ruleset: 'SRD_2014',
+      hitPointsCurrent: 44,
+      hitPointsMax: 44,
+      armorClass: 18,
+      abilityScores: { strength: 16, dexterity: 12, constitution: 14, intelligence: 10, wisdom: 11, charisma: 13 },
+      lineage: { id: 'lin-1', name: 'Humano' } as any,
+      background: { id: 'bg-1', name: 'Nobre' } as any,
+      archetype: { id: 'cls-1', name: 'Guerreiro' } as any,
+    };
+
+    const apiFetchSpy = vi
+      .spyOn(apiClient, 'apiFetch')
+      .mockImplementation(async (endpoint: string, options?: apiClient.ApiRequestOptions) => {
+        if (endpoint === '/api/characters/char-202') {
+          return existingChar;
+        }
+        if (endpoint === '/api/characters/char-202/reroll-ability-scores' && options?.method === 'POST') {
+          return {
+            ...existingChar,
+            abilityScores: { strength: 18, dexterity: 14, constitution: 16, intelligence: 10, wisdom: 11, charisma: 13 },
+          };
+        }
+        return undefined;
+      });
+
+    renderWithQuery(<EditCharacterPage />);
+
+    const rerollButton = await screen.findByTestId('reroll-ability-scores-button');
+    expect(rerollButton).toBeInTheDocument();
+    fireEvent.click(rerollButton);
+
+    await waitFor(() => {
+      expect(apiFetchSpy).toHaveBeenCalledWith(
+        '/api/characters/char-202/reroll-ability-scores',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+  });
+
+  it('renders locked badge when character is in a campaign without DM authorization', async () => {
+    const existingChar: Partial<CharacterResponse> = {
+      id: 'char-202',
+      name: 'Boromir de Gondor',
+      level: 5,
+      campaignId: 'camp-123',
+      allowAbilityReroll: false,
+      ruleset: 'SRD_2014',
+      hitPointsCurrent: 44,
+      hitPointsMax: 44,
+      armorClass: 18,
+      abilityScores: { strength: 16, dexterity: 12, constitution: 14, intelligence: 10, wisdom: 11, charisma: 13 },
+      lineage: { id: 'lin-1', name: 'Humano' } as any,
+      background: { id: 'bg-1', name: 'Nobre' } as any,
+      archetype: { id: 'cls-1', name: 'Guerreiro' } as any,
+    };
+
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation(async (endpoint: string) => {
+      if (endpoint === '/api/characters/char-202') {
+        return existingChar;
+      }
+      return undefined;
+    });
+
+    renderWithQuery(<EditCharacterPage />);
+
+    const lockedBadge = await screen.findByTestId('reroll-locked-badge');
+    expect(lockedBadge).toBeInTheDocument();
+    expect(screen.queryByTestId('reroll-ability-scores-button')).not.toBeInTheDocument();
+  });
 });

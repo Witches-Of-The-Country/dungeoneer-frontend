@@ -237,6 +237,7 @@ export interface CharacterResponse {
   feats?: CharacterFeat[];
   actions?: CharacterAction[];
   exhaustion?: number;
+  allowAbilityReroll?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -983,3 +984,63 @@ export const DND_SKILLS: DndSkillDefinition[] = [
   { id: 'stealth', enName: 'Stealth', ptName: 'Furtividade', ability: 'dexterity' },
   { id: 'survival', enName: 'Survival', ptName: 'Sobrevivência', ability: 'wisdom' },
 ];
+
+export async function rerollAbilityScores(
+  id: string,
+  abilityScores?: Partial<CharacterAbilityScores>
+): Promise<CharacterResponse> {
+  return apiFetch<CharacterResponse>(`/api/characters/${id}/reroll-ability-scores`, {
+    method: 'POST',
+    body: JSON.stringify({ abilityScores }),
+  });
+}
+
+export async function updateRerollPermission(
+  id: string,
+  allowAbilityReroll: boolean
+): Promise<CharacterResponse> {
+  return apiFetch<CharacterResponse>(`/api/characters/${id}/reroll-permission`, {
+    method: 'PATCH',
+    body: JSON.stringify({ allowAbilityReroll }),
+  });
+}
+
+export function useRerollAbilityScores() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      abilityScores,
+    }: {
+      id: string;
+      abilityScores?: Partial<CharacterAbilityScores>;
+    }) => rerollAbilityScores(id, abilityScores),
+    onSuccess: (updated, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', variables.id] });
+      if (updated?.id) {
+        queryClient.setQueryData(['characters', updated.id], updated);
+      }
+    },
+  });
+}
+
+export function useUpdateRerollPermission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      allowAbilityReroll,
+    }: {
+      id: string;
+      allowAbilityReroll: boolean;
+    }) => updateRerollPermission(id, allowAbilityReroll),
+    onSuccess: (updated, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+      queryClient.invalidateQueries({ queryKey: ['characters', variables.id] });
+      if (updated?.id) {
+        queryClient.setQueryData(['characters', updated.id], updated);
+      }
+    },
+  });
+}

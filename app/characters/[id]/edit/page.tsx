@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ArrowLeft, Save, Trash2, Lock } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Lock, Dices } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   useCharacter,
   useUpdateCharacter,
   useDeleteCharacter,
+  useRerollAbilityScores,
   ABILITY_KEYS,
   ABILITY_LABELS,
 } from "@/lib/api/characters";
@@ -55,6 +56,21 @@ export default function EditCharacterPage() {
   const { data: character, isLoading, isError } = useCharacter(characterId);
   const updateMutation = useUpdateCharacter();
   const deleteMutation = useDeleteCharacter();
+  const rerollMutation = useRerollAbilityScores();
+  const [isRerolling, setIsRerolling] = useState(false);
+
+  const handleReroll = async () => {
+    if (!character) return;
+    setIsRerolling(true);
+    try {
+      await rerollMutation.mutateAsync({ id: character.id });
+      toast.success("Atributos re-rolados com sucesso!");
+    } catch {
+      // handled by apiFetch / toast
+    } finally {
+      setIsRerolling(false);
+    }
+  };
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -194,6 +210,40 @@ export default function EditCharacterPage() {
                 </span>
               </div>
             ))}
+          </div>
+          <div className="pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-800">
+            <div>
+              <span className="text-xs text-slate-300 block font-medium">Re-rolagem de Atributos (4d6kh3)</span>
+              <span className="text-[11px] text-slate-500">
+                {!character.campaignId
+                  ? "Personagem fora de campanha pode re-rolar livremente seus atributos."
+                  : character.allowAbilityReroll
+                  ? "Re-rolagem autorizada pelo Mestre da Campanha."
+                  : "Personagem em campanha requer autorização do Mestre."}
+              </span>
+            </div>
+            {!character.campaignId || character.allowAbilityReroll ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleReroll}
+                disabled={isRerolling || rerollMutation.isPending}
+                className="border-amber-600/50 text-amber-200 hover:bg-amber-950/40 text-xs shrink-0"
+                data-testid="reroll-ability-scores-button"
+              >
+                <Dices className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                {isRerolling || rerollMutation.isPending ? "Re-rolando..." : "Re-rolar Atributos"}
+              </Button>
+            ) : (
+              <div
+                data-testid="reroll-locked-badge"
+                className="flex items-center gap-1.5 text-xs text-amber-500/80 bg-amber-950/40 px-3 py-1.5 rounded border border-amber-900/40"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span>Re-rolagem Bloqueada</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

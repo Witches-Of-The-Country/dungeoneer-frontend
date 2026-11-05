@@ -316,6 +316,7 @@ export default function CharacterCreationWizardPage() {
 
   // Step 3 Level, HP, Subclass & Skills State
   const [characterLevel, setCharacterLevel] = useState<number>(1);
+  const [levelInputStr, setLevelInputStr] = useState<string>("1");
   const [hpMethod, setHpMethod] = useState<HpCalculationMethod>("AVERAGE");
   const [selectedClassSkills, setSelectedClassSkills] = useState<string[]>([]);
   const [availableSubclasses, setAvailableSubclasses] = useState<Subclass[]>([]);
@@ -469,7 +470,9 @@ export default function CharacterCreationWizardPage() {
       const matched = originFeats.find(
         (f) =>
           f.name.trim().toLowerCase() === targetName ||
-          (f.nameEn && f.nameEn.trim().toLowerCase() === targetName)
+          (f.nameEn && f.nameEn.trim().toLowerCase() === targetName) ||
+          targetName.startsWith(f.name.trim().toLowerCase()) ||
+          (f.nameEn && targetName.startsWith(f.nameEn.trim().toLowerCase()))
       );
       if (matched) {
         setSelectedOriginFeatId(matched.id);
@@ -484,6 +487,7 @@ export default function CharacterCreationWizardPage() {
   const handleLevelChange = (lvl: number) => {
     const validLevel = Math.min(20, Math.max(1, lvl));
     setCharacterLevel(validLevel);
+    setLevelInputStr(String(validLevel));
   };
 
   // Class Skills Selection
@@ -1380,8 +1384,28 @@ export default function CharacterCreationWizardPage() {
                             type="number"
                             min={1}
                             max={20}
-                            value={characterLevel}
-                            onChange={(e) => handleLevelChange(Number(e.target.value) || 1)}
+                            value={levelInputStr}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setLevelInputStr(raw);
+                              const num = parseInt(raw, 10);
+                              if (!isNaN(num) && num >= 1 && num <= 20) {
+                                setCharacterLevel(num);
+                              }
+                            }}
+                            onBlur={() => {
+                              const num = parseInt(levelInputStr, 10);
+                              if (isNaN(num) || num < 1) {
+                                setCharacterLevel(1);
+                                setLevelInputStr("1");
+                              } else if (num > 20) {
+                                setCharacterLevel(20);
+                                setLevelInputStr("20");
+                              } else {
+                                setCharacterLevel(num);
+                                setLevelInputStr(String(num));
+                              }
+                            }}
                             className="bg-slate-900 border-amber-900/50 text-amber-50 font-mono text-base"
                           />
                           {characterLevel > 1 && (
