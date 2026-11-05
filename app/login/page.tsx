@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Metadata } from "next";
 import { LoginForm } from "@/components/login-form";
 
@@ -14,7 +15,9 @@ export default function LoginPage() {
       <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-sidebar-ring/5 rounded-full blur-3xl pointer-events-none" />
       
       <div className="w-full z-10">
-        <LoginForm />
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
       </div>
     </main>
   );
