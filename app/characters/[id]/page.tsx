@@ -179,23 +179,36 @@ export default function CharacterSheetPage() {
   }
 
   const handleAdjustHp = async (delta: number) => {
-    const nextHp = Math.min(
-      character.hitPointsMax,
-      Math.max(0, character.hitPointsCurrent + delta)
-    );
-    if (nextHp === character.hitPointsCurrent) return;
+    let nextCurrent = character.hitPointsCurrent;
+    let nextTemp = character.hitPointsTemp ?? 0;
+
+    if (delta < 0) {
+      const damage = Math.abs(delta);
+      const absorbedByTemp = Math.min(nextTemp, damage);
+      nextTemp = nextTemp - absorbedByTemp;
+      const remainingDamage = damage - absorbedByTemp;
+      nextCurrent = Math.max(0, nextCurrent - remainingDamage);
+    } else if (delta > 0) {
+      nextCurrent = Math.min(character.hitPointsMax, nextCurrent + delta);
+    }
+
+    if (nextCurrent === character.hitPointsCurrent && nextTemp === (character.hitPointsTemp ?? 0)) return;
 
     try {
       await updateMutation.mutateAsync({
         id: character.id,
         payload: {
           name: character.name,
-          hitPointsCurrent: nextHp,
-          hitPointsTemp: character.hitPointsTemp,
+          hitPointsCurrent: nextCurrent,
+          hitPointsTemp: nextTemp,
           notes: character.notes ?? "",
         },
       });
-      toast.success(`Pontos de Vida atualizados: ${nextHp} / ${character.hitPointsMax}`);
+      toast.success(
+        delta < 0
+          ? `Dano aplicado! Vida atual: ${nextCurrent}/${character.hitPointsMax} PV (PV Temp: ${nextTemp})`
+          : `Cura aplicada! Vida atual: ${nextCurrent}/${character.hitPointsMax} PV`
+      );
     } catch {
       // handled by apiFetch
     }
@@ -463,7 +476,9 @@ export default function CharacterSheetPage() {
                   variant="outline"
                   aria-label="Reduzir PV"
                   disabled={
-                    updateMutation.isPending || character.hitPointsCurrent <= 0
+                    updateMutation.isPending ||
+                    (character.hitPointsCurrent <= 0 &&
+                      (character.hitPointsTemp ?? 0) <= 0)
                   }
                   onClick={() => handleAdjustHp(-1)}
                   className="flex-1 border-red-900/50 bg-slate-950 hover:bg-red-950/40 text-red-300"
@@ -498,7 +513,9 @@ export default function CharacterSheetPage() {
                     variant="outline"
                     aria-label="Aplicar Dano"
                     disabled={
-                      updateMutation.isPending || character.hitPointsCurrent <= 0
+                      updateMutation.isPending ||
+                    (character.hitPointsCurrent <= 0 &&
+                      (character.hitPointsTemp ?? 0) <= 0)
                     }
                     onClick={handleApplyDamage}
                     className="h-8 px-2.5 border-red-900/50 bg-slate-950 hover:bg-red-950/40 text-red-400"

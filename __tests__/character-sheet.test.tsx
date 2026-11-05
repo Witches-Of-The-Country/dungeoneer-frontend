@@ -172,7 +172,7 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
         '/api/characters/char-101',
         expect.objectContaining({
           method: 'PUT',
-          body: expect.stringContaining('"hitPointsCurrent":19'),
+          body: expect.stringContaining('"hitPointsCurrent":21'),
         })
       );
     });

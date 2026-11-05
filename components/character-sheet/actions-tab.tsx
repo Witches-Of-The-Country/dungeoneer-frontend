@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Swords, Dices, Plus, Heart, Sparkles, Shield, X } from 'lucide-react';
+import { Swords, Dices, Plus, Heart, Sparkles, Shield, X, Pencil, Trash2 } from 'lucide-react';
 import { DiceRollerModal, DAMAGE_TYPE_LABELS } from './dice-roller-modal';
 import { toast } from 'sonner';
 
@@ -70,6 +70,15 @@ export function ActionsTab({ character }: ActionsTabProps) {
   const [newDamageFormula, setNewDamageFormula] = useState('');
   const [newDamageType, setNewDamageType] = useState('SLASHING');
   const [newDescription, setNewDescription] = useState('');
+
+  // Edit custom action state
+  const [editingAction, setEditingAction] = useState<CharacterAction | null>(null);
+  const [editActionName, setEditActionName] = useState('');
+  const [editActionType, setEditActionType] = useState('ACTION');
+  const [editAttackBonus, setEditAttackBonus] = useState<string>('');
+  const [editDamageFormula, setEditDamageFormula] = useState('');
+  const [editDamageType, setEditDamageType] = useState('SLASHING');
+  const [editDescription, setEditDescription] = useState('');
 
   // Load custom actions from localStorage
   useEffect(() => {
@@ -127,6 +136,56 @@ export function ActionsTab({ character }: ActionsTabProps) {
     setNewAttackBonus('');
     setNewDamageFormula('');
     setNewDescription('');
+  };
+
+  const handleStartEdit = (act: CharacterAction) => {
+    setEditingAction(act);
+    setEditActionName(act.name);
+    setEditActionType(act.actionType || 'ACTION');
+    setEditAttackBonus(
+      act.attackBonus !== null && act.attackBonus !== undefined ? String(act.attackBonus) : ''
+    );
+    const formula = act.damageRolls?.[0]?.diceFormula || '';
+    setEditDamageFormula(formula);
+    setEditDamageType(act.damageRolls?.[0]?.damageType || 'SLASHING');
+    setEditDescription(act.description || '');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAction || !editActionName.trim()) {
+      toast.error('Informe o nome da ação.');
+      return;
+    }
+
+    const updated = customActions.map((act) => {
+      if (act.id !== editingAction.id) return act;
+      return {
+        ...act,
+        name: editActionName.trim(),
+        actionType: editActionType,
+        attackBonus: editAttackBonus.trim() !== '' ? parseInt(editAttackBonus, 10) : null,
+        damageRolls: editDamageFormula.trim()
+          ? [
+              {
+                diceFormula: editDamageFormula.trim(),
+                damageType: editDamageType,
+              },
+            ]
+          : undefined,
+        description: editDescription.trim() || undefined,
+      };
+    });
+
+    saveCustomActions(updated);
+    toast.success('Ação personalizada atualizada com sucesso!');
+    setEditingAction(null);
+  };
+
+  const handleDeleteCustomAction = (actionId: string, actionName: string) => {
+    const updated = customActions.filter((act) => act.id !== actionId);
+    saveCustomActions(updated);
+    toast.success(`Ação "${actionName}" excluída.`);
   };
 
   const allActions = [...baseActions, ...customActions];
@@ -210,10 +269,12 @@ export function ActionsTab({ character }: ActionsTabProps) {
               (effectiveAttackBonus !== null && effectiveAttackBonus !== undefined) || !!formula;
             const maxCharges = act.maxCharges ?? act.maxUses;
             const currentCharges = act.usesRemaining ?? act.currentCharges;
+            const isCustom = act.category === 'CUSTOM' || act.sourceType === 'CUSTOM';
 
             return (
               <Card
                 key={act.id || `action-${index}`}
+                data-testid={isCustom ? `custom-action-${act.id}` : undefined}
                 className="bg-surface/60 border-primary/20 hover:border-primary/40 transition-colors"
               >
                 <CardHeader className="p-4 pb-2 flex flex-row items-start justify-between space-y-0">
@@ -241,7 +302,35 @@ export function ActionsTab({ character }: ActionsTabProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {/* Custom Action Controls: Edit & Delete */}
+                    {isCustom && act.id && (
+                      <div className="flex items-center gap-0.5 mr-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-300"
+                          onClick={() => handleStartEdit(act)}
+                          title="Editar Ação"
+                          aria-label={`Editar ${act.name}`}
+                          data-testid={`edit-action-${act.id}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
+                          onClick={() => handleDeleteCustomAction(act.id!, act.name)}
+                          title="Excluir Ação"
+                          aria-label={`Excluir ${act.name}`}
+                          data-testid={`delete-action-${act.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )}
+
                     {maxCharges ? (
                       <Badge
                         variant="outline"
@@ -367,13 +456,6 @@ export function ActionsTab({ character }: ActionsTabProps) {
                       <span className="font-mono font-bold text-emerald-400">
                         {formula ? `${formula} PV` : 'Recupera PV'}
                       </span>
-                    </div>
-                  )}
-
-                  {act.versatileDice && (
-                    <div className="flex justify-between text-[11px] text-muted-foreground/80">
-                      <span>Versátil:</span>
-                      <span className="font-mono text-amber-200">{act.versatileDice}</span>
                     </div>
                   )}
 
@@ -515,6 +597,138 @@ export function ActionsTab({ character }: ActionsTabProps) {
                 className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold"
               >
                 Salvar Ação
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Custom Action Dialog */}
+      <Dialog open={!!editingAction} onOpenChange={(open) => !open && setEditingAction(null)}>
+        <DialogContent className="max-w-md bg-slate-950 border border-amber-900/50 text-slate-100 p-5">
+          <DialogHeader className="pb-3 border-b border-amber-950/60">
+            <DialogTitle className="text-lg font-serif text-amber-200 flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-amber-400" />
+              Editar Ação Personalizada
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveEdit} className="space-y-3 pt-2">
+            <div>
+              <label className="block text-xs text-slate-300 font-semibold mb-1">
+                Nome da Ação *
+              </label>
+              <input
+                type="text"
+                required
+                value={editActionName}
+                onChange={(e) => setEditActionName(e.target.value)}
+                placeholder="Ex: Ataque Especial, Rajada Arcana..."
+                className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-slate-300 font-semibold mb-1">
+                  Tipo de Ação
+                </label>
+                <select
+                  value={editActionType}
+                  onChange={(e) => setEditActionType(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-100"
+                >
+                  <option value="ACTION">Ação</option>
+                  <option value="BONUS_ACTION">Ação Bônus</option>
+                  <option value="REACTION">Reação</option>
+                  <option value="FREE">Livre</option>
+                  <option value="SPECIAL">Especial / Passiva</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-300 font-semibold mb-1">
+                  Bônus de Ataque
+                </label>
+                <input
+                  type="number"
+                  value={editAttackBonus}
+                  onChange={(e) => setEditAttackBonus(e.target.value)}
+                  placeholder="Ex: 5 (+5)"
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-slate-300 font-semibold mb-1">
+                  Fórmula de Dano
+                </label>
+                <input
+                  type="text"
+                  value={editDamageFormula}
+                  onChange={(e) => setEditDamageFormula(e.target.value)}
+                  placeholder="Ex: 1d8+3"
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-300 font-semibold mb-1">
+                  Tipo de Dano
+                </label>
+                <select
+                  value={editDamageType}
+                  onChange={(e) => setEditDamageType(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-100"
+                >
+                  <option value="SLASHING">Cortante</option>
+                  <option value="PIERCING">Perfurante</option>
+                  <option value="BLUDGEONING">Concussão</option>
+                  <option value="FIRE">Fogo</option>
+                  <option value="COLD">Frio</option>
+                  <option value="LIGHTNING">Elétrico</option>
+                  <option value="ACID">Ácido</option>
+                  <option value="POISON">Veneno</option>
+                  <option value="NECROTIC">Necrótico</option>
+                  <option value="RADIANT">Radiante</option>
+                  <option value="FORCE">Energia / Força</option>
+                  <option value="PSYCHIC">Psíquico</option>
+                  <option value="THUNDER">Trovão</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-300 font-semibold mb-1">
+                Descrição ou Efeito
+              </label>
+              <textarea
+                rows={2}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Descreva detalhes mecânicos ou ativação..."
+                className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingAction(null)}
+                className="border-slate-800 text-slate-400"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold"
+              >
+                Salvar Alterações
               </Button>
             </div>
           </form>

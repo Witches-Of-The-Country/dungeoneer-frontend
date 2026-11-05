@@ -112,6 +112,19 @@ export interface ClassProgressionPayload {
   classLevel: number;
 }
 
+export type EquipmentSlot =
+  | 'CHEST'
+  | 'GLOVES'
+  | 'BOOTS'
+  | 'HELMET'
+  | 'PANTS'
+  | 'LEFT_HAND'
+  | 'RIGHT_HAND'
+  | 'CLOAK'
+  | 'RING_1'
+  | 'RING_2'
+  | 'NECKLACE';
+
 export interface CharacterItem {
   id: string;
   characterId: string;
@@ -130,6 +143,7 @@ export interface CharacterItem {
   ruleset?: string;
   quantity: number;
   equipped: boolean;
+  equippedSlot?: EquipmentSlot | string | null;
   attuned: boolean;
   mechanicalProperties?: any;
 }
@@ -795,6 +809,7 @@ export interface UpdateCurrencyPayload {
 
 export interface UpdateCharacterItemPayload {
   equipped?: boolean;
+  equippedSlot?: EquipmentSlot | string | null;
   attuned?: boolean;
   quantity?: number;
 }
