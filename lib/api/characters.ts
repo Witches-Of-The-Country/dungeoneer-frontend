@@ -123,7 +123,8 @@ export type EquipmentSlot =
   | 'CLOAK'
   | 'RING_1'
   | 'RING_2'
-  | 'NECKLACE';
+  | 'NECKLACE'
+  | 'TRINKET';
 
 export interface CharacterItem {
   id: string;

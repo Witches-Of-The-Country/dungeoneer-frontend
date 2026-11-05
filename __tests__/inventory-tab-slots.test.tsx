@@ -115,12 +115,12 @@ describe('InventoryTab — Equipment Slots Grid', () => {
     apiFetchSpy = vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockCharacterWithEquipment);
   });
 
-  it('TR-01: renders the 11 equipment slots and shows occupied vs empty state', () => {
+  it('TR-01: renders the 12 equipment slots and shows occupied vs empty state', () => {
     renderWithQuery(<InventoryTab character={mockCharacterWithEquipment} />);
 
     // Check header
-    expect(screen.getByText('Slots de Equipamento (11 Slots)')).toBeInTheDocument();
-    expect(screen.getByText('2 / 11 ocupados')).toBeInTheDocument();
+    expect(screen.getByText('Slots de Equipamento (12 Slots)')).toBeInTheDocument();
+    expect(screen.getByText('2 / 12 ocupados')).toBeInTheDocument();
 
     // Check CHEST occupied with Armadura de Placas
     const chestSlot = screen.getByTestId('equipment-slot-chest');
@@ -136,6 +136,11 @@ describe('InventoryTab — Equipment Slots Grid', () => {
     const helmSlot = screen.getByTestId('equipment-slot-helmet');
     expect(helmSlot).toHaveTextContent('Capacete');
     expect(helmSlot).toHaveTextContent('Vazio');
+
+    // Check TRINKET is empty
+    const trinketSlot = screen.getByTestId('equipment-slot-trinket');
+    expect(trinketSlot).toHaveTextContent('Acessório / Cinto');
+    expect(trinketSlot).toHaveTextContent('Vazio');
   });
 
   it('allows unequipping an item from the slot overview', async () => {

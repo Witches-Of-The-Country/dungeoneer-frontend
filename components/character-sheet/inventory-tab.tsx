@@ -25,6 +25,7 @@ export const EQUIPMENT_SLOTS: { slot: EquipmentSlot; label: string }[] = [
   { slot: 'GLOVES', label: 'Luvas' },
   { slot: 'PANTS', label: 'Calças' },
   { slot: 'BOOTS', label: 'Botas' },
+  { slot: 'TRINKET', label: 'Acessório / Cinto' },
   { slot: 'RIGHT_HAND', label: 'Mão Direita' },
   { slot: 'LEFT_HAND', label: 'Mão Esquerda' },
   { slot: 'RING_1', label: 'Anel 1' },
@@ -44,6 +45,7 @@ export function getSlotLabel(slot?: string | null): string {
     case 'RING_1': return 'Anel 1';
     case 'RING_2': return 'Anel 2';
     case 'NECKLACE': return 'Colar';
+    case 'TRINKET': return 'Acessório / Cinto';
     default: return 'Equipamento';
   }
 }
@@ -80,6 +82,7 @@ export function inferDefaultSlot(item: CharacterItem, inventory: CharacterItem[]
   if (name.includes('calça') || name.includes('calca') || name.includes('perneira')) return 'PANTS';
   if (name.includes('capa') || name.includes('manto') || name.includes('cloak') || name.includes('cape')) return 'CLOAK';
   if (name.includes('colar') || name.includes('amuleto') || name.includes('medalhão') || name.includes('medalhao') || name.includes('amulet') || name.includes('necklace') || name.includes('periapt')) return 'NECKLACE';
+  if (name.includes('cinto') || name.includes('cinturão') || name.includes('cinturao') || name.includes('faixa') || name.includes('belt') || name.includes('girdle') || name.includes('charm') || name.includes('talismã') || name.includes('talisma') || name.includes('talisman') || name.includes('trinket') || name.includes('berloque')) return 'TRINKET';
 
   return 'CHEST';
 }
@@ -229,10 +232,10 @@ export function InventoryTab({ character }: InventoryTabProps) {
         <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-xs font-serif font-bold text-amber-200 flex items-center gap-1.5 uppercase tracking-wide">
             <Shield className="w-4 h-4 text-amber-400" />
-            Slots de Equipamento (11 Slots)
+            Slots de Equipamento (12 Slots)
           </CardTitle>
           <span className="text-[11px] font-mono text-muted-foreground">
-            {inventory.filter((i) => i.equipped).length} / 11 ocupados
+            {inventory.filter((i) => i.equipped).length} / 12 ocupados
           </span>
         </CardHeader>
         <CardContent className="p-3 pt-0">
