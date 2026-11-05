@@ -376,4 +376,158 @@ describe('TP-01: 6-Step Character Creation Wizard', () => {
     expect(levelInput).toHaveValue(20);
     expect(screen.getAllByText(/Nível 20/i)[0]).toBeInTheDocument();
   });
+
+  it('TR-05: keeps user-selected origin feat from reverting to background default feat when changed in dropdown', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('/api/reference/lineages')) {
+        return [
+          {
+            id: 'lin-1',
+            name: 'Anão',
+            description: 'Robusto.',
+            speed: 25,
+            size: 'MEDIUM',
+            abilityBonuses: { CON: 2 },
+            traitsSummary: [],
+            ruleset: 'SRD_2024',
+          },
+        ];
+      }
+      if (endpoint.startsWith('/api/reference/classes')) {
+        return [
+          {
+            id: 'cls-1',
+            name: 'Guerreiro',
+            hitDice: 'd10',
+            primaryAbility: 'STRENGTH',
+            savingThrowProficiencies: ['STRENGTH', 'CONSTITUTION'],
+            spellcastingType: 'NONE',
+            ruleset: 'SRD_2024',
+          },
+        ];
+      }
+      if (endpoint.startsWith('/api/reference/backgrounds')) {
+        return [
+          {
+            id: 'bg-1',
+            name: 'Soldado',
+            description: 'Treinado em armas.',
+            skillProficiencies: ['Athletics', 'Intimidation'],
+            originFeatName: 'Atacante Selvagem',
+            allowedAbilityBonuses: ['STR', 'DEX', 'CON'],
+            ruleset: 'SRD_2024',
+          },
+        ];
+      }
+      if (endpoint.startsWith('/api/reference/feats')) {
+        return {
+          items: [
+            {
+              id: 'feat-savage-attacker',
+              name: 'Atacante Selvagem',
+              nameEn: 'Savage Attacker',
+              featType: 'ORIGIN',
+              description: 'Rola dano de arma duas vezes.',
+              ruleset: 'SRD_2024',
+            },
+            {
+              id: 'feat-alert',
+              name: 'Alerta',
+              nameEn: 'Alert',
+              featType: 'ORIGIN',
+              description: 'Iniciativa aumentada.',
+              ruleset: 'SRD_2024',
+            },
+          ],
+          nextCursor: null,
+          hasNext: false,
+          pageSize: 2,
+        };
+      }
+      return [];
+    });
+
+    renderWithQuery(<CharacterCreationWizardPage />);
+
+    // Step 1: Nome
+    fireEvent.change(screen.getByLabelText(/Nome do Personagem/i), { target: { value: 'Conan' } });
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+
+    // Step 2: Linhagem
+    await waitFor(() => expect(screen.getByText(/Passo 2 — Linhagem/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+
+    // Step 3: Classe
+    await waitFor(() => expect(screen.getByText(/Passo 3 — Classe/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+
+    // Step 4: Antecedente
+    await waitFor(() => expect(screen.getByText(/Passo 4 — Antecedente/i)).toBeInTheDocument());
+    const select = await screen.findByTestId('origin-feat-select');
+
+    // Should initially have preselected the background's origin feat (Atacante Selvagem)
+    expect(select).toHaveValue('feat-savage-attacker');
+
+    // Change dropdown to 'Alerta'
+    fireEvent.change(select, { target: { value: 'feat-alert' } });
+
+    // Must NOT revert back to feat-savage-attacker!
+    expect(select).toHaveValue('feat-alert');
+    expect(screen.getByText('Iniciativa aumentada.')).toBeInTheDocument();
+  });
+
+  it('TR-06: allows re-rolling attributes in Step 5 during character creation', async () => {
+    const rollCallUrls: string[] = [];
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation(async (endpoint: string, options?: apiClient.ApiRequestOptions) => {
+      if (endpoint.startsWith('/api/reference/lineages')) {
+        return [{ id: 'lin-1', name: 'Humano', speed: 30, size: 'MEDIUM', ruleset: 'SRD_2024' }];
+      }
+      if (endpoint.startsWith('/api/reference/classes')) {
+        return [{ id: 'cls-1', name: 'Guerreiro', hitDice: 'd10', ruleset: 'SRD_2024' }];
+      }
+      if (endpoint.startsWith('/api/reference/backgrounds')) {
+        return [{ id: 'bg-1', name: 'Soldado', ruleset: 'SRD_2024' }];
+      }
+      if (endpoint.startsWith('/api/reference/feats')) {
+        return { items: [{ id: 'feat-1', name: 'Alerta', featType: 'ORIGIN', ruleset: 'SRD_2024' }] };
+      }
+      if (endpoint.startsWith('/api/characters/ability-rolls') && options?.method === 'POST') {
+        rollCallUrls.push(endpoint);
+        return {
+          rollId: `roll-${rollCallUrls.length}`,
+          rolledScores: [16, 14, 13, 12, 10, 8],
+        };
+      }
+      return [];
+    });
+
+    renderWithQuery(<CharacterCreationWizardPage />);
+
+    // Step 1 to Step 5
+    fireEvent.change(screen.getByLabelText(/Nome do Personagem/i), { target: { value: 'Thor' } });
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 2 — Linhagem/i);
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 3 — Classe/i);
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 4 — Antecedente/i);
+    fireEvent.click(screen.getByRole('button', { name: /Próximo/i }));
+    await screen.findByText(/Passo 5 — Atributos/i);
+
+    // Switch to Rolagem
+    fireEvent.click(screen.getByText(/Rolagem \(4d6kh3\)/i));
+
+    // First roll
+    fireEvent.click(screen.getByRole('button', { name: /Rolar Atributos/i }));
+    await waitFor(() => expect(rollCallUrls.length).toBe(1));
+    expect(rollCallUrls[0]).toBe('/api/characters/ability-rolls');
+
+    // Reroll button must be visible and clickable
+    const rerollButton = await screen.findByTestId('reroll-wizard-button');
+    expect(rerollButton).toBeInTheDocument();
+    fireEvent.click(rerollButton);
+
+    await waitFor(() => expect(rollCallUrls.length).toBe(2));
+    expect(rollCallUrls[1]).toContain('forceNew=true');
+  });
 });

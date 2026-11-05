@@ -25,6 +25,7 @@ import {
   Camera,
   Moon,
   Sunrise,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { processAvatarImage } from "@/lib/image-upload";
@@ -43,6 +44,7 @@ import {
   useUpdateCharacter,
   useDeleteCharacter,
   useCharacterNotes,
+  useRerollAbilityScores,
   ABILITY_KEYS,
   ABILITY_LABELS,
   DND_SKILLS,
@@ -98,6 +100,21 @@ export default function CharacterSheetPage() {
   const deleteMutation = useDeleteCharacter();
 
   const [activeTab, setActiveTab] = useState<SheetTab>("Resumo");
+  const rerollMutation = useRerollAbilityScores();
+  const [isRerollingAbilities, setIsRerollingAbilities] = useState(false);
+
+  const handleRerollAbilities = async () => {
+    if (!character) return;
+    setIsRerollingAbilities(true);
+    try {
+      await rerollMutation.mutateAsync({ id: character.id });
+      toast.success("Atributos re-rolados com sucesso!");
+    } catch {
+      // handled by apiFetch / toast
+    } finally {
+      setIsRerollingAbilities(false);
+    }
+  };
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAddXpModal, setShowAddXpModal] = useState(false);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
@@ -710,47 +727,91 @@ export default function CharacterSheetPage() {
 
       {/* TAB 2: ATRIBUTOS */}
       {activeTab === "Atributos" && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {ABILITY_KEYS.map((key) => {
-            const label = ABILITY_LABELS[key];
-            const score = character.abilityScores?.[key] ?? 10;
-            const mod = calculateModifier(score);
-            const isProf = proficientSavingThrows.has(key);
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {ABILITY_KEYS.map((key) => {
+              const label = ABILITY_LABELS[key];
+              const score = character.abilityScores?.[key] ?? 10;
+              const mod = calculateModifier(score);
+              const isProf = proficientSavingThrows.has(key);
 
-            return (
-              <Card
-                key={key}
-                data-testid={`sheet-ability-card-${key}`}
-                className="bg-slate-900/85 border border-amber-900/40 text-center shadow-xl"
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-serif text-amber-400 uppercase tracking-wider">
-                    {label.short}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-slate-400">
-                    {label.full}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="text-3xl font-mono font-bold text-amber-50">
-                    {formatModifier(mod)}
-                  </div>
-                  <div className="inline-block px-3 py-1 rounded-full bg-slate-950 border border-amber-900/50 text-sm font-mono font-semibold text-amber-200">
-                    Valor: {score}
-                  </div>
-                  <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                    {isProf ? (
-                      <span className="text-amber-300 font-medium">
-                        ● Proficiente em Salvaguarda
-                      </span>
-                    ) : (
-                      <span>○ Sem proficiência</span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+              return (
+                <Card
+                  key={key}
+                  data-testid={`sheet-ability-card-${key}`}
+                  className="bg-slate-900/85 border border-amber-900/40 text-center shadow-xl"
+                >
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-serif text-amber-400 uppercase tracking-wider">
+                      {label.short}
+                    </CardTitle>
+                    <CardDescription className="text-xs text-slate-400">
+                      {label.full}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="text-3xl font-mono font-bold text-amber-50">
+                      {formatModifier(mod)}
+                    </div>
+                    <div className="inline-block px-3 py-1 rounded-full bg-slate-950 border border-amber-900/50 text-sm font-mono font-semibold text-amber-200">
+                      Valor: {score}
+                    </div>
+                    <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                      {isProf ? (
+                        <span className="text-amber-300 font-medium">
+                          ● Proficiente em Salvaguarda
+                        </span>
+                      ) : (
+                        <span>○ Sem proficiência</span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          <Card className="bg-slate-900/85 border border-amber-900/40 p-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="font-serif font-bold text-amber-200 text-sm flex items-center gap-2">
+                  <Dices className="w-4 h-4 text-amber-400" />
+                  Re-rolagem de Atributos (4d6kh3)
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {!character.campaignId
+                    ? "Ficha básica (fora de campanha): re-rolagem livre autorizada."
+                    : character.allowAbilityReroll
+                    ? "Re-rolagem autorizada pelo Mestre da Campanha."
+                    : "Personagem vinculado a uma campanha: requer autorização do Mestre."}
+                </p>
+              </div>
+
+              {!character.campaignId || character.allowAbilityReroll ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleRerollAbilities}
+                  disabled={isRerollingAbilities || rerollMutation.isPending}
+                  className="border-amber-600/50 text-amber-200 hover:bg-amber-950/40 text-xs shrink-0"
+                  data-testid="sheet-reroll-abilities-button"
+                >
+                  <Dices className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                  {isRerollingAbilities || rerollMutation.isPending
+                    ? "Re-rolando..."
+                    : "Re-rolar Atributos"}
+                </Button>
+              ) : (
+                <div
+                  data-testid="sheet-reroll-locked-badge"
+                  className="flex items-center gap-1.5 text-xs text-amber-500/80 bg-amber-950/40 px-3 py-1.5 rounded border border-amber-900/40"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>Re-rolagem Bloqueada</span>
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
       )}
 

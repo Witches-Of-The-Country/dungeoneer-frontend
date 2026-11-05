@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +25,7 @@ import {
   Dices,
   Eye,
   Sparkles,
+  Check,
   CheckCircle2,
   Lock,
   Plus,
@@ -462,9 +463,21 @@ export default function CharacterCreationWizardPage() {
     };
   }, [watchedRuleset]);
 
-  // Pre-select matching background origin feat when background changes in SRD_2024
+  const lastPreselectedBackgroundIdRef = useRef<string | null>(null);
+
+  // Pre-select matching background origin feat ONLY when background changes or initial load
   useEffect(() => {
     if (watchedRuleset !== "SRD_2024" || originFeats.length === 0) return;
+
+    // Do not overwrite user-selected feat if the background hasn't changed
+    if (
+      lastPreselectedBackgroundIdRef.current === selectedBackgroundId &&
+      selectedOriginFeatId
+    ) {
+      return;
+    }
+    lastPreselectedBackgroundIdRef.current = selectedBackgroundId;
+
     if (selectedBackground?.originFeatName) {
       const targetName = selectedBackground.originFeatName.trim().toLowerCase();
       const matched = originFeats.find(
@@ -482,7 +495,7 @@ export default function CharacterCreationWizardPage() {
     if (!selectedOriginFeatId && originFeats.length > 0) {
       setSelectedOriginFeatId(originFeats[0].id);
     }
-  }, [watchedRuleset, selectedBackground, originFeats, selectedOriginFeatId]);
+  }, [watchedRuleset, selectedBackgroundId, selectedBackground, originFeats, selectedOriginFeatId]);
 
   const handleLevelChange = (lvl: number) => {
     const validLevel = Math.min(20, Math.max(1, lvl));
@@ -673,10 +686,10 @@ export default function CharacterCreationWizardPage() {
     }
   }, []);
 
-  const handleRollAbilityScores = async () => {
-    if (hasRolledAbilities) return;
+  const handleRollAbilityScores = async (forceNew = false) => {
+    if (hasRolledAbilities && !forceNew) return;
     try {
-      const res = await rollAbilityMutation.mutateAsync();
+      const res = await rollAbilityMutation.mutateAsync(forceNew);
       setAbilityRollId(res.rollId);
       setHasRolledAbilities(true);
       const items = res.rolledScores.map((v, i) => ({
@@ -701,7 +714,11 @@ export default function CharacterCreationWizardPage() {
           })
         );
       }
-      toast.success("Atributos 4d6kh3 rolados! Distribua os valores nos slots.");
+      toast.success(
+        forceNew
+          ? "Atributos re-rolados com sucesso! Distribua os novos valores nos slots."
+          : "Atributos 4d6kh3 rolados! Distribua os valores nos slots."
+      );
     } catch {
       // error toast handled by apiFetch
     }
@@ -1837,25 +1854,55 @@ export default function CharacterCreationWizardPage() {
                               Rolagem Oficial da Guilda (4d6 descartando o menor)
                             </h4>
                             <p className="text-xs text-slate-400">
-                              Você possui apenas uma chance de rolagem para esta
-                              criação. Arraste ou clique nos números para
-                              alocá-los.
+                              {hasRolledAbilities
+                                ? "Ficha básica: você pode re-rolar atributos livremente nesta criação. Arraste ou clique nos números para alocá-los."
+                                : "Clique para rolar 4d6 descartando o menor para cada um dos 6 atributos."}
                             </p>
                           </div>
-                          <Button
-                            type="button"
-                            disabled={
-                              hasRolledAbilities ||
-                              rollAbilityMutation.isPending
-                            }
-                            onClick={handleRollAbilityScores}
-                            className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold shrink-0"
-                          >
-                            <Dices className="w-4 h-4 mr-2" />
-                            {hasRolledAbilities
-                              ? "Atributos Rolados"
-                              : "Rolar Atributos"}
-                          </Button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {hasRolledAbilities ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  disabled
+                                  className="bg-emerald-600/30 text-emerald-200 border border-emerald-500/40 cursor-not-allowed text-xs font-mono"
+                                >
+                                  <Check className="w-4 h-4 mr-1.5 text-emerald-400" />
+                                  Atributos Rolados
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => handleRollAbilityScores(true)}
+                                  disabled={rollAbilityMutation.isPending}
+                                  className="border-amber-600/50 text-amber-200 hover:bg-amber-950/40 text-xs font-serif font-bold"
+                                  data-testid="reroll-wizard-button"
+                                >
+                                  <Dices className="w-4 h-4 mr-1.5 text-amber-400" />
+                                  {rollAbilityMutation.isPending ? "Re-rolando..." : "Re-rolar Atributos"}
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                disabled={rollAbilityMutation.isPending}
+                                onClick={() => handleRollAbilityScores(false)}
+                                className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-serif font-bold text-xs"
+                              >
+                                {rollAbilityMutation.isPending ? (
+                                  <>
+                                    <Sparkles className="w-4 h-4 mr-2 animate-spin text-amber-950" />
+                                    Rolando Dados...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Dices className="w-4 h-4 mr-2 text-amber-950" />
+                                    Rolar Atributos
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       )}
 

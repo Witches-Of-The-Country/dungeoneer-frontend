@@ -443,8 +443,9 @@ export async function deleteCharacter(id: string): Promise<void> {
   });
 }
 
-export async function rollAbilityScores(): Promise<AbilityRollResponse> {
-  return apiFetch<AbilityRollResponse>('/api/characters/ability-rolls', {
+export async function rollAbilityScores(forceNew = false): Promise<AbilityRollResponse> {
+  const query = forceNew ? '?forceNew=true' : '';
+  return apiFetch<AbilityRollResponse>(`/api/characters/ability-rolls${query}`, {
     method: 'POST',
   });
 }
@@ -605,7 +606,7 @@ export function useUpdateCharacterNote(characterId: string) {
 
 export function useRollAbilityScores() {
   return useMutation({
-    mutationFn: () => rollAbilityScores(),
+    mutationFn: (forceNew?: boolean) => rollAbilityScores(forceNew),
   });
 }
 

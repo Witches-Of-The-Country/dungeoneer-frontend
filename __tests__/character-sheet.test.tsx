@@ -204,6 +204,17 @@ describe('TP-02: 8-Tab Character Sheet View (/characters/[id])', () => {
       screen.getByTestId('sheet-ability-card-dexterity')
     ).toHaveTextContent('Valor: 18');
 
+    // Test unbound reroll button on Atributos tab
+    const sheetRerollBtn = screen.getByTestId('sheet-reroll-abilities-button');
+    expect(sheetRerollBtn).toBeInTheDocument();
+    fireEvent.click(sheetRerollBtn);
+    await waitFor(() => {
+      expect(apiFetchSpy).toHaveBeenCalledWith(
+        '/api/characters/char-101/reroll-ability-scores',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
     // Tab 3: Perícias (18 skills in pt-BR)
     fireEvent.click(screen.getByRole('tab', { name: 'Perícias' }));
     expect(screen.getByText('Acrobacia')).toBeInTheDocument();
