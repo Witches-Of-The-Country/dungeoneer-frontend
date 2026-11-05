@@ -442,8 +442,8 @@ export default function CharacterCreationWizardPage() {
     }
     let active = true;
     Promise.all([
-      fetchFeats({ ruleset: "SRD_2024", limit: 100 }).catch(() => ({ items: [] })),
-      fetchFeats({ ruleset: "HOMEBREW", limit: 100 }).catch(() => ({ items: [] })),
+      fetchFeats({ ruleset: "SRD_2024", featTypes: ["ORIGIN"], limit: 100 }).catch(() => ({ items: [] })),
+      fetchFeats({ ruleset: "HOMEBREW", featTypes: ["ORIGIN"], limit: 100 }).catch(() => ({ items: [] })),
     ]).then(([srdPage, hbPage]) => {
       if (!active) return;
       const seen = new Set<string>();
@@ -451,7 +451,7 @@ export default function CharacterCreationWizardPage() {
         (f) => {
           if (seen.has(f.id)) return false;
           seen.add(f.id);
-          return !f.featType || f.featType === "ORIGIN";
+          return f.featType === "ORIGIN";
         }
       );
       setOriginFeats(merged);
