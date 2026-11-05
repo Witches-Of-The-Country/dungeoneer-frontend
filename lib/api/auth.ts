@@ -29,6 +29,15 @@ export interface RegisterPayload {
   roles?: string[];
 }
 
+export interface PublicKeyResponse {
+  publicKey: string;
+  algorithm: string;
+  hash: string;
+}
+
+let inMemoryToken: string | null = null;
+let cachedPublicKey: CryptoKey | null = null;
+
 function setCookie(name: string, value: string, days = 7) {
   if (typeof document === 'undefined') return;
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -40,6 +49,66 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64.replace(/\s+/g, ''));
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+export async function fetchPublicKey(): Promise<CryptoKey | null> {
+  if (cachedPublicKey) return cachedPublicKey;
+  if (typeof window === 'undefined' || !window.crypto?.subtle) return null;
+  try {
+    const res = await apiFetch<PublicKeyResponse>('/api/auth/public-key', { skipAuth: true });
+    if (!res?.publicKey) return null;
+    const der = base64ToArrayBuffer(res.publicKey);
+    cachedPublicKey = await window.crypto.subtle.importKey(
+      'spki',
+      der,
+      { name: 'RSA-OAEP', hash: 'SHA-256' },
+      false,
+      ['encrypt']
+    );
+    return cachedPublicKey;
+  } catch (err) {
+    console.warn('Failed to fetch public key for password encryption:', err);
+    return null;
+  }
+}
+
+export async function encryptPassword(plainPassword: string): Promise<string> {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) {
+    return plainPassword;
+  }
+  try {
+    const key = await fetchPublicKey();
+    if (!key) return plainPassword;
+    const encoded = new TextEncoder().encode(plainPassword);
+    const encryptedBuffer = await window.crypto.subtle.encrypt(
+      { name: 'RSA-OAEP' },
+      key,
+      encoded
+    );
+    return `rsa:${arrayBufferToBase64(encryptedBuffer)}`;
+  } catch (err) {
+    console.warn('RSA-OAEP encryption failed, sending raw credentials:', err);
+    return plainPassword;
+  }
 }
 
 export function isTokenExpired(token: string | null): boolean {
@@ -73,16 +142,18 @@ export function getCookie(name: string): string | null {
 
 function persistAuthSession(data: AuthResponse) {
   if (typeof window === 'undefined') return;
-  const token = data.accessToken;
+  inMemoryToken = data.accessToken;
   const userJson = JSON.stringify(data.user);
 
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-  window.localStorage.setItem('dungeoneer_token', token);
+  // Eliminate JWT storage in localStorage and client document.cookie (SEC-HIGH-02)
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem('dungeoneer_token');
+  deleteCookie(AUTH_TOKEN_KEY);
+  deleteCookie('dungeoneer_token');
+
+  // Persist only non-sensitive user profile for UI rendering
   window.localStorage.setItem(AUTH_USER_KEY, userJson);
   window.localStorage.setItem('dungeoneer_user', userJson);
-
-  setCookie(AUTH_TOKEN_KEY, token);
-  setCookie('dungeoneer_token', token);
   setCookie(AUTH_USER_KEY, userJson);
   setCookie('dungeoneer_user', userJson);
 
@@ -90,9 +161,13 @@ function persistAuthSession(data: AuthResponse) {
 }
 
 export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
+  const encryptedPassword = await encryptPassword(credentials.password);
   const data = await apiFetch<AuthResponse>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify(credentials),
+    body: JSON.stringify({
+      email: credentials.email,
+      password: encryptedPassword,
+    }),
     skipAuth: true,
   });
   persistAuthSession(data);
@@ -104,9 +179,13 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
 }
 
 export async function register(payload: RegisterPayload): Promise<AuthResponse> {
+  const encryptedPassword = await encryptPassword(payload.password);
   const data = await apiFetch<AuthResponse>('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      password: encryptedPassword,
+    }),
     skipAuth: true,
   });
   persistAuthSession(data);
@@ -118,26 +197,20 @@ export async function registerUser(payload: RegisterPayload): Promise<AuthRespon
 }
 
 export function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const token =
-    window.localStorage.getItem(AUTH_TOKEN_KEY) ||
-    window.localStorage.getItem('dungeoneer_token') ||
-    getCookie(AUTH_TOKEN_KEY) ||
-    getCookie('dungeoneer_token');
-  if (!token) return null;
-  if (isTokenExpired(token)) {
-    logout();
-    return null;
+  if (inMemoryToken) {
+    if (isTokenExpired(inMemoryToken)) {
+      inMemoryToken = null;
+      return null;
+    }
+    return inMemoryToken;
   }
-  return token;
+  return null;
 }
 
 export const getStoredToken = getToken;
 
 export function getUser(): UserProfile | null {
   if (typeof window === 'undefined') return null;
-  const token = getToken();
-  if (!token) return null;
   const userStr =
     window.localStorage.getItem(AUTH_USER_KEY) ||
     window.localStorage.getItem('dungeoneer_user') ||
@@ -183,7 +256,14 @@ export async function updateAvatar(avatarUrl: string): Promise<UserProfile> {
   return response;
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST', skipAuth: true });
+  } catch {
+    // Ignore network error on logout
+  }
+
+  inMemoryToken = null;
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
     window.localStorage.removeItem('dungeoneer_token');

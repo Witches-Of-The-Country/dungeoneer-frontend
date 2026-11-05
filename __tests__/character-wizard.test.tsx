@@ -262,4 +262,51 @@ describe('TP-01: 6-Step Character Creation Wizard', () => {
     });
     expect(mockPush).toHaveBeenCalledWith('/characters/char-created-999');
   });
+
+  it('requests and renders strictly ORIGIN feats in the wizard, passing featTypes=ORIGIN', async () => {
+    const apiFetchSpy = vi
+      .spyOn(apiClient, 'apiFetch')
+      .mockImplementation(async (endpoint: string) => {
+        if (endpoint.startsWith('/api/reference/feats')) {
+          return {
+            items: [
+              {
+                id: 'feat-origin-1',
+                ruleset: 'SRD_2024',
+                slug: 'alert',
+                name: 'Alerta',
+                nameEn: 'Alert',
+                featType: 'ORIGIN',
+                description: 'Iniciativa aumentada',
+                source: 'SRD',
+              },
+              {
+                id: 'feat-general-1',
+                ruleset: 'SRD_2024',
+                slug: 'war-caster',
+                name: 'Conjurador de Guerra',
+                nameEn: 'War Caster',
+                featType: 'GENERAL',
+                description: 'Vantagem em concentraÃ§Ã£o',
+                source: 'SRD',
+              },
+            ],
+            nextCursor: null,
+          };
+        }
+        return [];
+      });
+
+    renderWithQuery(<CharacterCreationWizardPage />);
+
+    await waitFor(() => {
+      const featCalls = apiFetchSpy.mock.calls.filter(([url]) =>
+        url.startsWith('/api/reference/feats')
+      );
+      expect(featCalls.length).toBeGreaterThan(0);
+      for (const [url] of featCalls) {
+        expect(url).toContain('featTypes=ORIGIN');
+      }
+    });
+  });
 });
