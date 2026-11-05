@@ -95,29 +95,46 @@ function parseCostToCopper(item: Item): number {
   }
 }
 
+function normalizeText(text: string | null | undefined): string {
+  if (!text) return '';
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 export function ItemCatalogModal({ character, open, onClose }: ItemCatalogModalProps) {
   const { addItem } = useManageInventory(character.id);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [purchaseMode, setPurchaseMode] = useState<'FREE' | 'BUY'>('FREE');
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     if (!open) return;
     setLoading(true);
 
+    const trimmed = debouncedSearch.trim();
     const paramsRuleset: any = { limit: 100 };
     if (character.ruleset) paramsRuleset.ruleset = character.ruleset;
-    if (search.trim()) paramsRuleset.q = search.trim();
+    if (trimmed) paramsRuleset.q = trimmed;
 
     const paramsHomebrew: any = { ruleset: 'HOMEBREW', limit: 100 };
-    if (search.trim()) paramsHomebrew.q = search.trim();
+    if (trimmed) paramsHomebrew.q = trimmed;
 
     const paramsAll: any = { limit: 100 };
-    if (search.trim()) paramsAll.q = search.trim();
+    if (trimmed) paramsAll.q = trimmed;
 
     Promise.all([
       fetchItems(paramsRuleset).catch(() => ({ items: [] })),
@@ -144,14 +161,18 @@ export function ItemCatalogModal({ character, open, onClose }: ItemCatalogModalP
         toast.error('Erro ao carregar o catálogo de itens.');
       })
       .finally(() => setLoading(false));
-  }, [open, character.ruleset, search]);
+  }, [open, character.ruleset, debouncedSearch]);
 
   const filteredItems = useMemo(() => {
+    const normSearch = normalizeText(search.trim());
     return items.filter((item) => {
       const matchSearch =
-        !search ||
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        (item.nameEn && item.nameEn.toLowerCase().includes(search.toLowerCase()));
+        !normSearch ||
+        normalizeText(item.name).includes(normSearch) ||
+        normalizeText(item.nameEn).includes(normSearch) ||
+        normalizeText(item.itemType).includes(normSearch) ||
+        normalizeText(item.itemCategory).includes(normSearch) ||
+        normalizeText(item.description).includes(normSearch);
 
       const matchCategory =
         selectedCategory === 'ALL' ||
@@ -168,6 +189,16 @@ export function ItemCatalogModal({ character, open, onClose }: ItemCatalogModalP
       return matchSearch && matchCategory;
     });
   }, [items, search, selectedCategory]);
+
+  useEffect(() => {
+    if (filteredItems.length > 0) {
+      if (!selectedItem || !filteredItems.some((it) => it.id === selectedItem.id)) {
+        setSelectedItem(filteredItems[0]);
+      }
+    } else {
+      setSelectedItem(null);
+    }
+  }, [filteredItems, selectedItem]);
 
   const currency = character.currency;
   const totalCopper = currency?.totalCopper ?? 0;

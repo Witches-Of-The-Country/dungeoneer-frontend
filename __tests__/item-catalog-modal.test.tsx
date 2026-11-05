@@ -169,4 +169,34 @@ describe('ItemCatalogModal Component', () => {
       expect.any(Object)
     );
   });
+
+  it('TR-03: filters items by unaccented query and partial prefix without wiping local list', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ItemCatalogModal character={mockCharacter} open={true} onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Espada Longa')).toBeInTheDocument();
+      expect(screen.getAllByText('Poção de Cura').length).toBeGreaterThanOrEqual(1);
+    });
+
+    const searchInput = screen.getByPlaceholderText(/buscar item por nome/i);
+
+    // Search with unaccented "pocao" -> should match "Poção de Cura"
+    fireEvent.change(searchInput, { target: { value: 'pocao' } });
+    expect(screen.getAllByText('Poção de Cura').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Espada Longa')).not.toBeInTheDocument();
+
+    // Search with partial prefix "esp" -> should match "Espada Longa"
+    fireEvent.change(searchInput, { target: { value: 'esp' } });
+    expect(screen.getAllByText('Espada Longa').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Poção de Cura')).not.toBeInTheDocument();
+
+    // Search with english name "longsword" -> should match "Espada Longa"
+    fireEvent.change(searchInput, { target: { value: 'longsword' } });
+    expect(screen.getAllByText('Espada Longa').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Poção de Cura')).not.toBeInTheDocument();
+  });
 });
